@@ -122,6 +122,24 @@ signal(fs::Quantity;kwds...) = x -> signal(x,fs;kwds...)
 signal(x,fs::Union{Number,Missing}=missing) = signal(x,SignalTrait(x),fs)
 signal(x,::Nothing,fs) = error("Don't know how create a signal from $x.")
 
+const backends = Set{String}()
+"""
+
+## Filenames
+
+A string with a filename ending with an appropriate filetype can be read in
+as a signal. You will need to call `import` or `using` on the backend for
+reading the file.
+
+Available backends include the following pacakges
+- [WAV](https://codecov.io/gh/haberdashPI/SignalOperators.jl/src/master/src/WAV.jl)
+- [LibSndFile](https://github.com/JuliaAudio/LibSndFile.jl)
+
+"""
+function signal(x::String,fs::Union{Missing,Number}=missing)
+    filetype =
+end
+
 """
 
 ## Existing signals
