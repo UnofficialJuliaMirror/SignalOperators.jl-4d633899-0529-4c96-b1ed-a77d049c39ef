@@ -1,5 +1,6 @@
 module SignalOperators
-using Requires, DSP, LambdaFn, Unitful, Compat, PrettyPrinting, FillArrays
+using Requires, DSP, LambdaFn, Unitful, Compat, PrettyPrinting, FillArrays,
+    FileIO
 
 using PrettyPrinting: best_fit, indent, list_layout, literal, pair_layout
 
@@ -26,9 +27,13 @@ include("reformatting.jl")
 include("ramps.jl")
 
 # extensions
-# @require SampledSignals = "TODO" begin
-#     include("SampledSignals.jl")
-# end
+@require SampledSignals = "bd7594eb-a658-542f-9e75-4c4d8908c167" begin
+    include("SampledSignals.jl")
+end
+
+@require LibSndFile = "b13ce0c6-77b0-50c6-a2db-140568b8d1a5" begin
+    include("LibSndFile.jl")
+end
 
 # handle reading/writing to files
 # using WAV

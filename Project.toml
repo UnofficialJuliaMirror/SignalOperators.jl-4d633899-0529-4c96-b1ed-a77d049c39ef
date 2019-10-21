@@ -36,6 +36,8 @@ FixedPointNumbers = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WAV = "8149f6b0-98f6-5db9-b78f-408fbbb8ef88"
+LibSndFile = "b13ce0c6-77b0-50c6-a2db-140568b8d1a5"
+SampledSignals = "bd7594eb-a658-542f-9e75-4c4d8908c167"
 
 [targets]
 test = ["Test", "WAV", "FixedPointNumbers", "BenchmarkTools", "ProgressMeter"]

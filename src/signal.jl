@@ -122,7 +122,15 @@ signal(fs::Quantity;kwds...) = x -> signal(x,fs;kwds...)
 signal(x,fs::Union{Number,Missing}=missing) = signal(x,SignalTrait(x),fs)
 signal(x,::Nothing,fs) = error("Don't know how create a signal from $x.")
 
-const backends = Set{String}()
+function filetype(x)
+    m = match(r".*(\.[^\.]$)")
+    if isnothing(m)
+        error("The file \"$x\" has no filetype.")
+    else
+        DataFormat{Symbol(uppercase(m[1]))}()
+    end
+end
+
 """
 
 ## Filenames
@@ -136,8 +144,12 @@ Available backends include the following pacakges
 - [LibSndFile](https://github.com/JuliaAudio/LibSndFile.jl)
 
 """
-function signal(x::String,fs::Union{Missing,Number}=missing)
-    filetype =
+signal(x::String,fs::Union{Missing,Number}=missing) =
+    load_signal(filetype(x),x,fs)
+
+function load_signal(::DataFormat{T},x,fs) where T
+    error("No backend loaded for file of type $T. Refer to the ",
+          "documentation of `signal` to find a list of available backends.")
 end
 
 """
