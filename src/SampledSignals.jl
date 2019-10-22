@@ -14,3 +14,9 @@ samplerate(x::SampleBuf) = SampledSignals.samplerate(x)
 @Base.propagate_inbounds function sampleat!(result,x::SampleBuf,i,j,check)
     writesink!(result,i,view(x,j,:))
 end
+
+function sink(x,::Type{<:SampleBuf{El}};kwds...) where El
+    x,n = process_sink_params(x;kwds...)
+    result = SampleBuf{El}(n,nchannels(x))
+    sink!(result,x)
+end

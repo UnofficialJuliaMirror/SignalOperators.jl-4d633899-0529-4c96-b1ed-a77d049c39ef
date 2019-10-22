@@ -36,7 +36,7 @@ function sink(x,::Type{<:AxisArray};kwds...)
     channels = Axis{:channel}(1:nchannels(x))
     AxisArray(result,times,channels)
 end
-function sink(x,::Type{<:Array};kwds...)
+function sink(x,::Type{<:Array{El}};kwds...) where El
     x,n = process_sink_params(x;kwds...)
     result = Array{El}(undef,n,nchannels(x))
     sink!(result,x)
