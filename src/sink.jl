@@ -103,7 +103,7 @@ atcheckpoint(x,check) =
 
 fold(x) = zip(x,Iterators.drop(x,1))
 sink!(result,x,sig::IsSignal,offset::Number) =
-    sink!(result,x,sig,offset,atcheckpoint(x,offset,size(result,1)+offset))
+    sink!(result,x,sig,offset,nextchunk(x,offset+1,size(result,1)+offset))
 function sink!(result,x,sig::IsSignal,offset,check)
     written = 0
     while !isnothing(check) && written < size(result,1)
