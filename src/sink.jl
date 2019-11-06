@@ -59,17 +59,17 @@ end
 sink(x, ::IsSignal, ::Nothing, ::Type) = error("Don't know how to interpret value as a signal: $x")
 
 """
-    sink!(array,x;[samplerate],[offset])
+    sink!(array,x;[samplerate])
 
-Write `size(array,1)` samples of signal `x` to `array`, starting from the sample after
-`offset`. If no sample rate has been specified for `x` you can specify it
-now, using `samplerate` (it will default to 44.1kHz).
+Write `size(array,1)` samples of signal `x` to `array`. If no sample rate has
+been specified for `x` you can specify it now, using `samplerate` (it will
+default to 44.1kHz).
 
 """
 sink!(result::Union{AbstractVector,AbstractMatrix};kwds...) =
     x -> sink!(result,x;kwds...)
 function sink!(result::Union{AbstractVector,AbstractMatrix},x;
-    samplerate=SignalOperators.samplerate(x),offset=0)
+    samplerate=SignalOperators.samplerate(x))
 
     if ismissing(samplerate) && ismissing(SignalOperators.samplerate(x))
         @warn("No sample rate was specified, defaulting to 44.1 kHz.")
@@ -77,53 +77,36 @@ function sink!(result::Union{AbstractVector,AbstractMatrix},x;
     end
     x = signal(x,samplerate)
 
-    if nsamples(x)-offset < size(result,1)
+    if nsamples(x) < size(result,1)
         error("Signal is too short to fill buffer of length $(size(result,1)).")
     end
     x = tochannels(x,size(result,2))
 
-    sink!(result,x,SignalTrait(x),offset)
+    sink!(result,x,SignalTrait(x))
 end
 
-abstract type AbstractCheckpoint{S}
-end
-struct EmptyCheckpoint{S} <: AbstractCheckpoint{S}
-    n::Int
-end
-checkindex(x::EmptyCheckpoint) = x.n
-child(x::Number) = x
-checkindex(x::Number) = x+1
-
-atcheckpoint(x,offset::Number,stopat) =
-    offset ≥ stopat ? nothing : EmptyCheckpoint{typeof(x)}(1+offset)
-atcheckpoint(x::S,check::AbstractCheckpoint{S},stopat) where S =
-    checkindex(check) == stopat+1 ? nothing : EmptyCheckpoint{S}(stopat+1)
-atcheckpoint(x,check) =
-    error("Internal error: signal inconsistent with checkpoint")
+abstract type AbstractChunk; end
+function maxlength; end
+function nextchunk; end
+nextchunk(x,chunk::AbstractChunk) = nextchunk(x,chunk,maxlength(x,chunk))
+nextchunk(x,size::Int) = nextchunk(x,nothing,size)
 
 fold(x) = zip(x,Iterators.drop(x,1))
-sink!(result,x,sig::IsSignal,offset::Number) =
-    sink!(result,x,sig,offset,nextchunk(x,offset+1,size(result,1)+offset))
-function sink!(result,x,sig::IsSignal,offset,check)
+sink!(result,x,sig::IsSignal) = sink!(result,x,sig,nextchunk(x,size(result,1)))
+function sink!(result,x,::IsSignal,chunk)
     written = 0
-    while !isnothing(check) && written < size(result,1)
-        next = atcheckpoint(x,check,offset+size(result,1))
-        isnothing(next) && break
-
-        len = checkindex(next) - checkindex(check)
-        @assert len > 0
-
-        sink_helper!(result,offset,x,check,len)
-        written += len
-        check = next
+    while !isnothing(chunk) && written < size(result,1)
+        sink_helper!(result,chunk)
+        written += length(chunk)
+        chunk = nextchunk(x,chunk,size(result,1)-written)
     end
     @assert written == size(result,1)
     result
 end
 
-@noinline function sink_helper!(result,offset,x,check,len)
-    @inbounds @simd for i in checkindex(check):(checkindex(check)+len-1)
-        sampleat!(result,x,i-offset,i,check)
+@noinline function sink_helper!(result,written,chunk)
+    @inbounds @simd for i in eachindex(chunk)
+        writesink!(result,i+written,chunk[i,:])
     end
 end
 
