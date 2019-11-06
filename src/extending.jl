@@ -245,7 +245,7 @@ function usepad(x::PaddedSignal,s::IsSignal{T},fn::Function,check) where T
     nargs = map(x -> x.nargs - 1, methods(fn).ms)
     if 3 ∈ nargs
         if indexable(x.signal)
-            fn
+            i -> fn(x.signal,i,:)
         else
             io = IOBuffer()
             show(io,MIME("text/plain"),x)
@@ -274,67 +274,41 @@ const use_pad = UsePad()
 
 struct PadChunk{P,C} <: AbstractChunk
     pad::P
-    child::C
+    child_or_len::C
 end
+child(x::PadChunk{<:Nothing}) = x.child_or_len
+child(x::PadChunk) = nothing
+nsampels(x::PadChunk{<:Nothing}) = nsamples(child(x))
+nsampels(x::PadChunk) = x.child_or_len
+
+sample(x::PadChunk{<:Nothing},i) = sample(child(x),i)
+sample(x::PadChunk{<:Function},i) = x.pad(i)
+sample(x::PadChunk,i) = x.pad
 
 function initchunk(x::PaddedSignal)
     chunk = initchunk(child(x))
     if maxchunklen(chunk) == 0
-        PadChunk(usepad(x,chunk),nothing)
+        PadChunk(usepad(x,chunk),0)
     else
         PadChunk(nothing,chunk)
     end
 end
 
+maxchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing}) =
+    maxchunklen(child(x),chunk.child)
+maxchunklen(x::PaddedSignal,::PadChunk) = inflen
 function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))
-    childchunk = nextchunk(child(x),chunk.child,len,skip)
+    childchunk = nextchunk(child(x),child(chunk),len,skip)
     if isnothing(childchunk)
-        PadChunk(usepad(x,chunk),nothing)
+        PadChunk(usepad(x,chunk),len)
     else
-        PadChunk(childchunk,)
-end
-
-
-
-atcheckpoint(x::PaddedSignal,offset::Number,stopat) =
-    pad_atcheckpoint(x,offset,stopat)
-atcheckpoint(x::S,offset::AbstractCheckpoint{S},stopat) where
-    S <: PaddedSignal = pad_atcheckpoint(x,offset,stopat)
-function pad_atcheckpoint(x::PaddedSignal,check,stopat)
-    childcheck = isnothing(child(check)) ? nothing :
-        atcheckpoint(child(x),child(check),min(stopat,nsamples(child(x))))
-    if !isnothing(childcheck) && checkindex(childcheck) < nsamples(child(x))
-        S,C = typeof(x), typeof(childcheck)
-        PadCheckpoint{S,Nothing,C}(nothing,childcheck)
-    else
-        p = usepad(x,check)
-        index = if !isnothing(childcheck)
-            checkindex(childcheck)
-        else
-            check isa Number ? check+1 : stopat+1
-        end
-        S,P,C = typeof(x), typeof(p), typeof(index)
-        PadCheckpoint{S,P,C}(p,index)
+        PadChunk(nothing,childchunk)
     end
 end
-
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::PadCheckpoint{S,<:Nothing}) where S <: PaddedSignal
-
-    sampleat!(result,x.signal,i,j,child(check))
-end
-
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::PadCheckpoint{S,<:Function}) where S <: PaddedSignal
-
-    writesink!(result,i,check.pad(x.signal,j,:))
-end
-
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::PadCheckpoint{S}) where S <: PaddedSignal
-
-    writesink!(result,i,check.pad)
+function nextchunk(x::PaddedSignal,chunk::PadChunk,maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    PadChunk(chunk.pad,len)
 end
 
 Base.show(io::IO,::MIME"text/plain",x::PaddedSignal) = pprint(io,x)
