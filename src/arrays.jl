@@ -77,16 +77,31 @@ const AxTimeD1 = Union{
     WithAxes{<:Tuple{Axis{:time}}},
     WithAxes{<:Tuple{Axis{:time},<:Any}}}
 const AxTimeD2 = WithAxes{<:Tuple{<:Any,Axis{:time}}}
-@Base.propagate_inbounds function sampleat!(result,x::AxTimeD1,
-    i::Number,j::Number,check)
+const AxTime = Union{AxTimeD1,AxTimeD2}
 
-    writesink!(result,i,view(x,j,:))
+struct ArrayChunk{A} <: AbstractChunk
+    offset::Int
+    ar::A
 end
-@Base.propagate_inbounds function sampleat!(result,x::AxTimeD2,
-    i::Number,j::Number,check)
+nsamples(x::ArrayChunk) = size(x.ar,1)
+sample(x::ArrayChunk,i) = view(x.ar,i,:)
 
-    writesink!(result,i,view(x,:,j))
+maxchunklen(x::AxTime,chunk::ArrayChunk) = size(x,timedim(x)) - chunk.offset
+nsamples(chunk::ArrayChunk) = size(chunk.ar,1)
+timedim(x::AxTimeD1) = 1
+timedim(x::AxTimeD2) = 2
+
+initchunk(x::AxTime) = ArrayChunk(0,1:0)
+function nextchunk(x::AxTime,chunk::ArrayChunk,maxlen)
+    len = min(maxlen,maxchunklen(x,chunk))
+    offset = chunk.offset + nsamples(chunk)
+    indices = offset .+ (1:len)
+    array_chunk_helper(x,offset,indices)
 end
+array_chunk_helper(x::AxTimeD1,offset,indices) =
+    ArrayChunk(offset, view(x,indices,:))
+array_chunk_helper(x::AxTimeD2,offset,indices) =
+    ArrayChunk(offset, view(x,:,indices))
 
 function signaltile(x)
     io = IOBuffer()

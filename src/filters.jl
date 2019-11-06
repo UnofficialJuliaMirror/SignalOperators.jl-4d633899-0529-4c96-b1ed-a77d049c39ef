@@ -211,11 +211,12 @@ function nsamples(x::FilteredSignal)
     end
 end
 
-struct FilterCheckpoint{S,St} <: AbstractCheckpoint{S}
+struct FilterChunk{St} <: AbstractChunk
     n::Int
+    len::Int
     state::St
 end
-checkindex(c::FilterCheckpoint) = c.n
+nsamples(x::FilterChunk) = x.len
 
 struct NullBuffer
     len::Int
@@ -231,24 +232,18 @@ outputlength(x,n) = n
 inputlength(x::DSP.Filters.Filter,n) = DSP.inputlength(x,n)
 outputlength(x::DSP.Filters.Filter,n) = DSP.outputlength(x,n)
 
-function atcheckpoint(x::FilteredSignal,offset::Number,stopat,state=FilterState(x))
-    S,St  = typeof(x), typeof(state)
-    FilterCheckpoint{S,St}(max(state.last_output_offset+1,offset+1),state)
+function initchunk(x::FilteredSignal)
+    state = prepare_state!(x,FilterState(x),0)
+    FilterChunk(0,0,state)
 end
 
-function atcheckpoint(x::S,check::AbstractCheckpoint{S},stopat) where
-    S <: FilteredSignal
+maxchunklen(x::FilteredSignal,chunk) = chunk.state.last_output_offset - chunk.n
+function nextchunk(x::FilteredSignal,chunk,maxlen,skip)
+    n = chunk.n + chunk.len
+    len = min(maxlen,maxchunklen(x,chunk))
+    state = prepare_state!(x,chunk.state,n+len)
 
-    state = prepare_state!(x,check.state,checkindex(check))
-    # if there's output to produce, create a new checkpoint
-    if min(state.last_output_offset,stopat) > checkindex(check)
-        St  = typeof(state)
-        FilterCheckpoint{S,St}(min(state.last_output_offset+1,stopat+1),state)
-
-    # otherwise, indicate that there is no more data
-    else
-        nothing
-    end
+    state.last_output_offset ≥ n+len ? FilterChunk(n,len,state) : nothing
 end
 
 function prepare_state!(x,state,index)
@@ -257,7 +252,7 @@ function prepare_state!(x,state,index)
         if state.last_output_offset+1 < index
             recurse_len = index - (state.last_output_offset + 1)
             sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
-                  0,atcheckpoint(x,0,recurse_len,state))
+                  nextchunk(x,FilterChunk(state.last_output_offset,state)))
         end
         @assert state.last_output_offset+1 ≥ index
 
@@ -287,9 +282,9 @@ function prepare_state!(x,state,index)
     state
 end
 
-@Base.propagate_inbounds function sampleat!(result,x::FilteredSignal,i,j,check)
-    index = j-check.state.first_output_offset
-    writesink!(result,i,view(check.state.output,index,:))
+@Base.propagate_inbounds function sample(x::FilterChunk,i)
+    index = i-x.state.first_output_offset
+    view(x.state.output,index,:)
 end
 
 # TODO: create an online version of normpower?
@@ -315,38 +310,34 @@ function tosamplerate(x::NormedSignal,::IsSignal{<:Any,Missing},
     NormedSignal(tosamplerate(x.signal,fs,blocksize=blocksize))
 end
 
-struct NormedCheckpoint{S,V} <: AbstractCheckpoint{S}
-    n::Int
-    vals::V
+struct NormedChunk{A}
+    offset::Int
+    len::Int
+    vals::A
 end
-checkindex(x::NormedCheckpoint) = x.n
+nsamples(x::NormedChunk) = x.len
+@Base.propagate_inbounds sample(x::NormedChunk,i) = view(x.vals,i,:)
 
-function atcheckpoint(x::NormedSignal,offset::Number,stopat)
+function initchunk(x::NormedSignal)
     if isinf(nsamples(x))
         error("Cannot normalize an infinite-length signal. Please ",
               "use `until` to take a prefix of the signal")
     end
     vals = sink!(Array{channel_eltype(x)}(undef,nsamples(x),nchannels(x)),
-        x.signal,offset=0)
+        x.signal)
 
     rms = sqrt(mean(x -> float(x)^2,vals))
     vals ./= rms
 
     S,V = typeof(x), typeof(vals)
-    NormedCheckpoint{typeof(x),typeof(vals)}(offset+1,vals)
+    NormedChunk(0,0,vals)
 end
 
-function atcheckpoint(x::S,check::AbstractCheckpoint{S},stopat) where
-    S <: NormedSignal
-
-    checkindex(check) == stopat ? nothing :
-        NormedCheckpoint{typeof(x),typeof(check.vals)}(stopat+1,check.vals)
-end
-
-@Base.propagate_inbounds function sampleat!(result,x::NormedSignal,
-    i,j,check::NormedCheckpoint)
-
-    writesink!(result,i,view(check.vals,j,:))
+maxchunklen(x::NormedSignal,chunk) = nsamples(x) - chunk.offset
+nsamples(chunk::NormedChunk) = chunk.len
+function nextchunk(x::NormedSignal,chunk,maxlen)
+    len = min(maxlen,maxchunklen(x,chunk))
+    NormedChunk(chunk.offset + chunk.len, len, chunk.vals)
 end
 
 """

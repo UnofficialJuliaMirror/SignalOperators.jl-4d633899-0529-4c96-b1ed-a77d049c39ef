@@ -56,52 +56,39 @@ tosamplerate(x::AppendSignals,s::IsSignal{<:Any,<:Number},c::ComputedSignal,fs;b
 tosamplerate(x::AppendSignals,s::IsSignal{<:Any,Missing},__ignore__,fs;
     blocksize) = append(tosamplerate.(x.signals,fs;blocksize=blocksize)...)
 
-struct AppendCheckpoint{Si,S,C} <: AbstractCheckpoint{Si}
+struct AppendChunk{Si,S,C} <: AbstractChunk
     signal::S
-    offset::Int
     child::C
     k::Int
 end
-checkindex(x::AppendCheckpoint) = checkindex(x.child)+x.offset
-child(x::AppendCheckpoint) = x.child
+nsamples(x::AppendSignals) = nsamples(x.child)
+@Base.propagate_inbounds sample(x::AppendSignals,i) = sample(x.child,i)
 
-atcheckpoint(x::AppendSignals,offset::Number,stopat) =
-    append_checkpoint(x,nothing,offset+1,stopat,1,0)
-
-atcheckpoint(x::S,check::AppendCheckpoint{S},stopat) where S <: AppendSignals =
-    append_checkpoint(x,check,checkindex(check),stopat,check.k,
-        check.offset)
-
-function append_checkpoint(x,check,startat,stopat,start_k,offset)
-    childcheck = nothing
-    childsig = x.signals[1]
-    k = start_k
+function initchunk(x::AppendSignals)
+    k = 1
+    chunk = initchunk(x.signals[k])
     K = length(x.signals)
-    keepme(k,sig,check) =
-        !isnothing(check) && (k == K || checkindex(check) ≤ nsamples(sig))
-    while isnothing(childcheck) && k ≤ length(x.signals)
-        childsig = x.signals[k]
-        child_range = (1:nsamples(childsig)) .+ offset
-        if !isempty((startat:stopat) ∩ child_range)
-            child_stopat = min(stopat - offset,nsamples(childsig))
-            if isnothing(check) || k != start_k
-                child_offset = max(0,startat - offset - 1)
-                childcheck = atcheckpoint(childsig,child_offset,child_stopat)
-                keepme(k,childsig,childcheck) || (childcheck = nothing)
-            else
-                childcheck = atcheckpoint(childsig,child(check),child_stopat)
-                keepme(k,childsig,childcheck) || (childcheck = nothing)
-            end
-        end
-        if isnothing(childcheck)
-            offset += nsamples(childsig)
-            k += 1
-        end
+    while maxchunklen(chunk) == 0 && k < K
+        chunk = initchunk(x.signals[k])
     end
+    AppendChunk(x.signals[k],chunk,k)
+end
 
-    if !isnothing(childcheck)
-        Si,S = typeof(x),typeof(childsig)
-        AppendCheckpoint{Si,S,typeof(childcheck)}(childsig,offset,childcheck,k)
+maxchunklen(x::AppendSignals,chunk::AppendChunk) =
+    maxchunklen(chunk.signal,chunk.child)
+
+function nextchunk(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+
+    childchunk = nextchunk(chunk.signal,chunk.child,maxlen,skip)
+    k = chunk.k
+    K = length(x.signals)
+    while isnothing(childchunk) && k < K
+        k += 1
+        childchunk = nextchunk(x.signals[k],initchunk(x.signals[k]),maxlen,skip)
+    end
+    if !isnothing(childchunk)
+        AppendChunk(x.signals[k],childchunk,k)
     end
 end
 
@@ -285,14 +272,30 @@ struct UsePad
 end
 const use_pad = UsePad()
 
-struct PadCheckpoint{S,P,C} <: AbstractCheckpoint{S}
+struct PadChunk{P,C} <: AbstractChunk
     pad::P
-    child_or_index::C
+    child::C
 end
-child(x::PadCheckpoint{<:Any,Nothing}) = x.child_or_index
-child(x::PadCheckpoint) = nothing
-checkindex(c::PadCheckpoint{<:Any,Nothing}) = checkindex(c.child_or_index)
-checkindex(c::PadCheckpoint) = c.child_or_index
+
+function initchunk(x::PaddedSignal)
+    chunk = initchunk(child(x))
+    if maxchunklen(chunk) == 0
+        PadChunk(usepad(x,chunk),nothing)
+    else
+        PadChunk(nothing,chunk)
+    end
+end
+
+function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    childchunk = nextchunk(child(x),chunk.child,len,skip)
+    if isnothing(childchunk)
+        PadChunk(usepad(x,chunk),nothing)
+    else
+        PadChunk(childchunk,)
+end
+
+
 
 atcheckpoint(x::PaddedSignal,offset::Number,stopat) =
     pad_atcheckpoint(x,offset,stopat)

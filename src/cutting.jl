@@ -78,39 +78,34 @@ function tosamplerate(x::CutApply{<:Any,<:Any,K},s::IsSignal{<:Any,Missing},
     CutApply(tosamplerate(child(x),fs;blocksize=blocksize),x.time,K())
 end
 
-struct AfterCheckpoint{S,C} <: AbstractCheckpoint{S}
-    diff::Int
+struct CutChunk{C} <: AbstractChunk
+    n::Int
     child::C
 end
-checkindex(c::AfterCheckpoint) = checkindex(c.child)-c.diff
-# No long offset, use 'stopat' index
-function atcheckpoint(x::AfterApply,offset::Number,stopat::Int)
-    n = resolvelen(x)
-    childcheck = atcheckpoint(child(x),offset+n,stopat+n)
-    if !isnothing(childcheck)
-        AfterCheckpoint{typeof(x),typeof(childcheck)}(n,childcheck)
+child(x::CutChunk) = x.child
+
+initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
+function initchunk(x::AfterApply)
+    skipped = 0
+    len = resolvelen(x)
+    chunk = initchunk(child(x))
+    while !isnothing(chunk) && skipped < len
+        chunk = nextchunk(x,chunk,len - skipped,true)
+        skipped += nsamples(chunk)
     end
+    @assert skipped == len
+    CutChunk(len,chunk)
 end
 
-function atcheckpoint(x::S,check::AfterCheckpoint{S},stopat::Int) where
-    S <: AfterApply
-
-    n = resolvelen(x)
-    childcheck = atcheckpoint(child(x),check.child,stopat+n)
-    if !isnothing(childcheck)
-        AfterCheckpoint{S,typeof(childcheck)}(n,childcheck)
-    end
+maxchunklen(x::UntilApply,chunk::CutChunk) =
+    min(chunk.n,maxchunklen(child(x),child(chunk)))
+function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    childchunk = nextchunk(x,child(chunk),len,skip)
+    CutChunk(x.n - len,childchunk)
 end
 
-
-atcheckpoint(x::UntilApply,offset::Number,stopat) =
-    atcheckpoint(child(x),offset,stopat)
-atcheckpoint(x::UntilApply,offset::AbstractCheckpoint,stopat) =
-    atcheckpoint(child(x),offset,stopat)
-@Base.propagate_inbounds function sampleat!(result,x::AfterApply,i,j,check)
-    sampleat!(result,x.signal,i,j+check.diff,check.child)
-end
-
-@Base.propagate_inbounds function sampleat!(result,x::UntilApply,i,j,check)
-    sampleat!(result,x.signal,i,j,check)
-end
+nextchunk(x::CutApply,chunk::CutChunk,maxlen,skip) =
+    CutChunk(nextchunk(x,child(chunk),maxlen,skip))
+nsamples(x::CutChunk) = nsamples(child(x))
+@Base.propagate_inbounds sample(x::CutChunk,i) = sample(child(x),i)

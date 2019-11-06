@@ -86,27 +86,28 @@ function sink!(result::Union{AbstractVector,AbstractMatrix},x;
 end
 
 abstract type AbstractChunk; end
-function maxlength; end
+function sample; end
+function maxchunklen; end
 function nextchunk; end
-nextchunk(x,chunk::AbstractChunk) = nextchunk(x,chunk,maxlength(x,chunk))
-nextchunk(x,size::Int) = nextchunk(x,nothing,size)
+nextchunk(x,chunk,len,skip) = nextchunk(x,chunk,len)
 
 fold(x) = zip(x,Iterators.drop(x,1))
-sink!(result,x,sig::IsSignal) = sink!(result,x,sig,nextchunk(x,size(result,1)))
+sink!(result,x,sig::IsSignal) =
+    sink!(result,x,sig,nextchunk(x,initchunk(x),size(result,1),false))
 function sink!(result,x,::IsSignal,chunk)
     written = 0
     while !isnothing(chunk) && written < size(result,1)
-        sink_helper!(result,chunk)
-        written += length(chunk)
-        chunk = nextchunk(x,chunk,size(result,1)-written)
+        sink_helper!(result,written,chunk)
+        chunk = nextchunk(x,chunk,size(result,1)-written,false)
+        written += nsamples(chunk)
     end
     @assert written == size(result,1)
     result
 end
 
 @noinline function sink_helper!(result,written,chunk)
-    @inbounds @simd for i in eachindex(chunk)
-        writesink!(result,i+written,chunk[i,:])
+    @inbounds @simd for i in 1:nsamples(chunk)
+        writesink!(result,i+written,sample(chunk,i))
     end
 end
 
