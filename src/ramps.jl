@@ -40,65 +40,77 @@ function tosamplerate(
     RampSignal(D,tosamplerate(child(x),fs;blocksize=blocksize),x.time,x.fn)
 end
 
-struct RampCheckpoint{S,R} <: AbstractCheckpoint{S}
-    time::Int
-    n::Int
+struct RampChunk{D,T,R} <: AbstractChunk
+    rampfn::R
+    marker::Int
+    stop::Int
+    offset::Int
+    len::Int
+    ch::Int
 end
-checkindex(x::RampCheckpoint) = x.n
-function RampCheckpoint(x::RampSignal,len::Int,index::Int,ramp::Bool)
-    RampCheckpoint{typeof(x),ramp}(len,index)
-end
+nsamples(x::RampChunk) = x.len
+sample(x::RampChunk{<:Any,T,Nothing},i) where T = Fill(one(T),x.ch)
 
-function atcheckpoint(x::RampSignal{:on},offset::Number,stopat::Int)
-    ramplen =  resolvelen(x)
-    RampCheckpoint(x,ramplen,offset+1,offset ≤ ramplen)
-end
-function atcheckpoint(x::S,check::RampCheckpoint{S},stopat::Int) where
-    S <: RampSignal{:on}
-    ramplen = resolvelen(x)
-    if checkindex(check) ≤ resolvelen(x)
-        RampCheckpoint(x,ramplen,min(ramplen+1,stopat+1),false)
-    else
-        RampCheckpoint(x,ramplen,stopat+1,false)
-    end
+function sample(x::RampChunk{:on},i)
+    ramplen = check.time
+    rampval = x.fn((j-1) / ramplen)
+    Fill(rampval,x.ch)
 end
 
-function atcheckpoint(x::RampSignal{:off},offset::Number,stopat::Int)
-    startramp = nsamples(x) - resolvelen(x)
-    RampCheckpoint(x,startramp,offset+1,nsamples(x) ≤ startramp)
-end
-
-function atcheckpoint(x::S,check::RampCheckpoint{S},stopat::Int) where
-    S <: RampSignal{:off}
-
-    startramp = nsamples(x) - resolvelen(x)
-    if checkindex(check) ≥ startramp
-        RampCheckpoint(x,startramp,stopat+1,true)
-    else
-        RampCheckpoint(x,startramp,min(startramp,stopat+1),true)
-    end
-end
-
-
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::RampCheckpoint{S,false}) where S <: RampSignal
-    writesink!(result,i,Fill(one(channel_eltype(x)),nchannels(x)))
-end
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::RampCheckpoint{S,true}) where S <: RampSignal{:off}
-
+function sample(x::RampChunk{:off},i)
     startramp = check.time
     rampval = nsamples(x) > startramp ?
         rampval = x.fn(1-(i - startramp)/(nsamples(x) - startramp)) :
         rampval = x.fn(1)
-    writesink!(result,i,Fill(rampval,nchannels(x)))
+    Fill(rampval,x.ch)
 end
-@Base.propagate_inbounds function sampleat!(result,x::S,
-    i,j,check::RampCheckpoint{S,true}) where S <: RampSignal{:on}
 
-    ramplen = check.time
-    rampval = x.fn((j-1) / ramplen)
-    writesink!(result,i,Fill(rampval,nchannels(x)))
+RampChunk{D}(x,fn,marker,stop,offset,len,nchannels(x)) =
+    RampChunk{D,float(channel_eltype(x)),typeof(fn)}(fn,marker,stop,offset,len)
+
+initchunk(x::RampSignal{:on}) =
+    RampChunk{:on}(x,x.fn,resolvelen(x),nsamples(x),0,0)
+initchunk(x::RampSignal{:off}) =
+    RampChunk{:off}(x,nothing,nsamples(x) - resolvelen(x),nsamples(x),0)
+maxchunklen(x::RampSignal{:on},chunk::RampChunk) =
+    chunk.marker - chunk.offset
+maxchunklen(x::RampSignal{:on},chunk::RampChunk{Nothing}) =
+    chunk.stop - chunk.offset
+maxchunklen(x::RampSignal{:off},chunk::RampChunk) =
+    chunk.marker - chunk.offset
+maxchunklen(x::RampSignal{:off},chunk::RampChunk{Nothing}) =
+    chunk.stop - chunk.offset
+
+function nextchunk(x::RampSignal{:on},chunk::RampChunk,maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    offset = chunk.offset + chunk.len
+    if offset < chunk.marker
+        RampChunk{:on}(x,x.fn,chunk.marker,chunk.stop,offset,len)
+    else
+        RampChunk{:on}(x,nothing,chunk.marker,chunk.stop,offset,len)
+    end
+end
+
+function nextchunk(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    offset = chunk.offset + chunk.len
+    RampChunk{:on}(x,nothing,chunk.marker,chunk.stop,offset,len)
+end
+
+function nextchunk(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    offset = chunk.offset + chunk.len
+    if offset < chunk.marker
+        RampChunk{:off}(x,nothing,chunk.marker,chunk.stop,offset,len)
+    else
+        RampChunk{:off}(x,x.fn,chunk.marker,chunk.stop,offset,len)
+    end
+end
+
+function nextchunk(x::RampSignal{:off},chunk::RampChunk,maxlen,skip)
+    len = min(maxlen,maxchunklen(x,chunk))
+    offset = chunk.offset + chunk.len
+    RampChunk{:off}(x,x.fn,chunk.marker,chunk.stop,offset,len)
 end
 
 function Base.show(io::IO, ::MIME"text/plain",x::RampSignal{D}) where D
