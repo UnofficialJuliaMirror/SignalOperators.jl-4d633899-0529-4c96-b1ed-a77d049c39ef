@@ -156,11 +156,6 @@ struct MapSignalChunk{N,CN,Fn,Ch,C}
 end
 nsamples(x::MapSignalChunk) = x.len
 
-maxchunklen(x::MapSignal,chunk::MapSignalChunk) =
-    minimum(maxchunklen.(x.padded_signals,chunk.children))
-maxchunklen(x::MapSignal,inits::Tuple) =
-    minimum(maxchunklen.(x.padded_signals,inits))
-
 function prepare_channels(x::MapSignal,chunk::MapSignalChunk)
     channels = if !isnothing(chunk)
         chunk.channels
@@ -173,6 +168,11 @@ function prepare_channels(x::MapSignal,chunk::MapSignalChunk)
 end
 
 initchunk(x::MapSignal) = initchunk.(x.padded_signals)
+maxchunklen(x::MapSignal,chunk::MapSignalChunk) =
+    minimum(maxchunklen.(x.padded_signals,chunk.children))
+maxchunklen(x::MapSignal,inits::Tuple) =
+    minimum(maxchunklen.(x.padded_signals,inits))
+
 function nextchunk(x::MapSignal{<:Any,N},chunk,maxlen,skip) where N
     maxlen = min(maxlen,maxchunklen(x,chunk))
     channels = prepare_channels(x,chunk)
@@ -181,10 +181,13 @@ function nextchunk(x::MapSignal{<:Any,N},chunk,maxlen,skip) where N
     MapSignalChunk{N,CN,Fn,Ch,C}(x.fn,maxlen,channels,children)
 end
 
-__map_index(::Int,::Tuple,::Tuple,::Val{0}) = ()
-function __map_index(i::Int,children::Tuple,chunks::Tuple,::Val{N}) where N
-    (__map_index(i,children,chunks,Val{N-1}())...,
-        chunkview(children[N],1,i,chunks[N]))
+map_sample_helper(::Int,::Tuple,::Tuple,::Val{0}) = ()
+function map_sample_helper(i::Int,
+    children::Tuple,
+    chunks::Tuple,
+    ::Val{N}) where N
+
+    (map_sample_helper(i,children,chunks,Val{N-1}())..., sample(chunks[N],i))
 end
 
 trange(::Val{N}) where N = (trange(Val(N-1))...,N)
@@ -194,30 +197,25 @@ trange(::Val{1}) = (1,)
     x::MapSignalChunk{N,CN,<:FnBr,<:Nothing},
     i::Int) where {N,CN}
 
-    inputs = __map_index(i,x.children,x.chunks,Val{N}())
+    inputs = map_sample_helper(i,x.children,x.chunks,Val{N}())
 
-    map(trange(Val{CN})) do ch
-        x.fn(map(@λ(_[ch]),inputs)...)
-    end
+    map(ch -> x.fn(map(@λ(_[ch]),inputs)...),trange(Val{CN}))
 end
 
 @Base.propagate_inbounds function sample(
     x::MapSignalChunk{N,CN,<:FnBr,<:Array},
     i::Int) where {N,CN}
 
-    inputs = __map_index(i,x.children,x.chunks,Val{N}())
+    inputs = map_sample_helper(i,x.children,x.chunks,Val{N}())
 
-    map!(x.channels,1:CN) do ch
-        x.fn(map(@λ(_[ch]),inputs)...)
-    end
+    map!(ch -> x.fn(map(@λ(_[ch]),inputs)...),x.channels,1:CN)
 end
 
 @Base.propagate_inbounds function sample(
     x::MapSignalChunk{N,CN,<:Any,<:Nothing},
     i::Int) where {N,CN}
 
-    inputs = __map_index(i,x.children,x.chunks,Val{N}())
-    x.fn(inputs...)
+    x.fn(map_sample_helper(i,x.children,x.chunks,Val{N}())...)
 end
 
 default_pad(x) = zero
