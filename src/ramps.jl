@@ -49,24 +49,24 @@ struct RampChunk{D,T,R} <: AbstractChunk
     ch::Int
 end
 nsamples(x::RampChunk) = x.len
+function RampChunk{D}(x,fn,marker,stop,offset,len) where D
+    T,Fn = float(channel_eltype(x)),typeof(fn)
+    RampChunk{D,T,Fn}(fn,marker,stop,offset,len,nchannels(x))
+end
+
 sample(x::RampChunk{<:Any,T,Nothing},i) where T = Fill(one(T),x.ch)
-
 function sample(x::RampChunk{:on},i)
-    ramplen = check.time
-    rampval = x.fn((j-1) / ramplen)
+    ramplen = x.marker
+    rampval = x.rampfn((i-1) / ramplen)
     Fill(rampval,x.ch)
 end
-
 function sample(x::RampChunk{:off},i)
-    startramp = check.time
-    rampval = nsamples(x) > startramp ?
-        rampval = x.fn(1-(i - startramp)/(nsamples(x) - startramp)) :
-        rampval = x.fn(1)
+    startramp = x.marker
+    rampval = x.stop > startramp ?
+        rampval = x.rampfn(1-(i - startramp)/(x.stop - startramp)) :
+        rampval = x.rampfn(1)
     Fill(rampval,x.ch)
 end
-
-RampChunk{D}(x,fn,marker,stop,offset,len,nchannels(x)) =
-    RampChunk{D,float(channel_eltype(x)),typeof(fn)}(fn,marker,stop,offset,len)
 
 initchunk(x::RampSignal{:on}) =
     RampChunk{:on}(x,x.fn,resolvelen(x),nsamples(x),0,0)

@@ -45,9 +45,9 @@ struct FunctionChunk{T}
     signal::T
     len::Int
 end
-initchunk(x::NumberSignal) = FunctionChunk(x,0)
-nextchunk(x::NumberSignal,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
-maxchunklen(x::NumberSignal,chunk) = inflen
+initchunk(x::SignalFunction) = FunctionChunk(x,0)
+nextchunk(x::SignalFunction,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
+maxchunklen(x::SignalFunction,chunk) = inflen
 nsamples(chunk::FunctionChunk) = chunk.len
 
 function sample(chunk::FunctionChunk,i)
@@ -121,4 +121,4 @@ generator; `rng` defaults to `Random.GLOBAL_RNG`.
 signal(x::typeof(randn),fs::Union{Missing,Number}=missing;rng=Random.GLOBAL_RNG) =
     SignalFunction(RandFn(rng),(randn(rng),),missing,0.0,inHz(Float64,fs))
 
-sample(chunk::FunctionChunk{<:RandFn},i) = randn(chunk.signal.fn.rng)
+sample(chunk::FunctionChunk{<:SignalFunction{<:RandFn,Missing}},i) = randn(chunk.signal.fn.rng)

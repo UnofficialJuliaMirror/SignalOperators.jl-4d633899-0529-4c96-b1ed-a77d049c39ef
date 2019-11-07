@@ -92,7 +92,6 @@ function maxchunklen
 end
 function nextchunk
 end
-nextchunk(x,chunk,len,skip) = nextchunk(x,chunk,len)
 
 fold(x) = zip(x,Iterators.drop(x,1))
 sink!(result,x,sig::IsSignal) =
@@ -100,9 +99,10 @@ sink!(result,x,sig::IsSignal) =
 function sink!(result,x,::IsSignal,chunk)
     written = 0
     while !isnothing(chunk) && written < size(result,1)
+        @assert nsamples(chunk) > 0
         sink_helper!(result,written,chunk)
-        chunk = nextchunk(x,chunk,size(result,1)-written,false)
         written += nsamples(chunk)
+        chunk = nextchunk(x,chunk,size(result,1)-written,false)
     end
     @assert written == size(result,1)
     result

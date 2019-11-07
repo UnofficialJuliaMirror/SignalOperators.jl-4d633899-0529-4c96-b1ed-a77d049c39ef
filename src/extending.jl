@@ -61,8 +61,8 @@ struct AppendChunk{Si,S,C} <: AbstractChunk
     child::C
     k::Int
 end
-nsamples(x::AppendSignals) = nsamples(x.child)
-@Base.propagate_inbounds sample(x::AppendSignals,i) = sample(x.child,i)
+nsamples(x::AppendChunk) = nsamples(x.child)
+@Base.propagate_inbounds sample(x::AppendChunk,i) = sample(x.child,i)
 
 function initchunk(x::AppendSignals)
     k = 1
@@ -278,8 +278,8 @@ struct PadChunk{P,C} <: AbstractChunk
 end
 child(x::PadChunk{<:Nothing}) = x.child_or_len
 child(x::PadChunk) = nothing
-nsampels(x::PadChunk{<:Nothing}) = nsamples(child(x))
-nsampels(x::PadChunk) = x.child_or_len
+nsamples(x::PadChunk{<:Nothing}) = nsamples(child(x))
+nsamples(x::PadChunk) = x.child_or_len
 
 sample(x::PadChunk{<:Nothing},i) = sample(child(x),i)
 sample(x::PadChunk{<:Function},i) = x.pad(i)
@@ -287,7 +287,7 @@ sample(x::PadChunk,i) = x.pad
 
 function initchunk(x::PaddedSignal)
     chunk = initchunk(child(x))
-    if maxchunklen(chunk) == 0
+    if maxchunklen(child(x),chunk) == 0
         PadChunk(usepad(x,chunk),0)
     else
         PadChunk(nothing,chunk)
@@ -295,7 +295,7 @@ function initchunk(x::PaddedSignal)
 end
 
 maxchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing}) =
-    maxchunklen(child(x),chunk.child)
+    maxchunklen(child(x),child(chunk))
 maxchunklen(x::PaddedSignal,::PadChunk) = inflen
 function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))

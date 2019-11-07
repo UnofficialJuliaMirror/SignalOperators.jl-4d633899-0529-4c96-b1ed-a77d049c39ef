@@ -140,37 +140,40 @@ testvalue(x) = Tuple(zero(channel_eltype(x)) for _ in 1:nchannels(x))
 
 const MAX_CHANNEL_STACK = 64
 
-struct MapSignalChunk{N,CN,Fn,Ch,C}
+struct MapSignalChunk{N,CN,Fn,Ch,C,S}
     fn::Fn
     len::Int
     channels::Ch
-    children::C
+    chunks::C
+    signals::S
 end
 nsamples(x::MapSignalChunk) = x.len
 
-function prepare_channels(x::MapSignal,chunk::MapSignalChunk)
-    channels = if !isnothing(chunk)
-        chunk.channels
-    else
-        nch = ntuple_N(typeof(x.val))
-        (nch > MAX_CHANNEL_STACK && (x.fn isa FnBr)) ?
-            Array{channel_eltype(x)}(undef,nch) :
-            nothing
-    end
+function prepare_channels(x::MapSignal)
+    nch = ntuple_N(typeof(x.val))
+    (nch > MAX_CHANNEL_STACK && (x.fn isa FnBr)) ?
+        Array{channel_eltype(x)}(undef,nch) :
+        nothing
 end
 
-initchunk(x::MapSignal) = initchunk.(x.padded_signals)
+function initchunk(x::MapSignal{Fn,N,CN}) where {Fn,N,CN}
+    channels = prepare_channels(x)
+    chunks = initchunk.(x.padded_signals)
+    Ch,C,S = typeof(channels),typeof(chunks),typeof(x.padded_signals)
+    MapSignalChunk{N,CN,Fn,Ch,C,S}(x.fn,0,channels,chunks,x.padded_signals)
+end
+
 maxchunklen(x::MapSignal,chunk::MapSignalChunk) =
-    minimum(maxchunklen.(x.padded_signals,chunk.children))
+    minimum(maxchunklen.(x.padded_signals,chunk.chunks))
 maxchunklen(x::MapSignal,inits::Tuple) =
     minimum(maxchunklen.(x.padded_signals,inits))
 
-function nextchunk(x::MapSignal{<:Any,N},chunk,maxlen,skip) where N
+function nextchunk(x::MapSignal{Fn,N,CN},chunk,maxlen,skip) where {Fn,N,CN}
     maxlen = min(maxlen,maxchunklen(x,chunk))
-    channels = prepare_channels(x,chunk)
-    children = nextchunk.(x.padded_signals,chunk.children,maxlen,skip)
-    N,CN,Fn,Ch,C = N,length(channels),x.fn,typeof(channels),typeof(children)
-    MapSignalChunk{N,CN,Fn,Ch,C}(x.fn,maxlen,channels,children)
+    channels = chunk.channels
+    chunks = nextchunk.(x.padded_signals,chunk.chunks,maxlen,skip)
+    Ch,C,S = typeof(channels),typeof(chunks),typeof(x.padded_signals)
+    MapSignalChunk{N,CN,Fn,Ch,C,S}(x.fn,maxlen,channels,chunks,x.padded_signals)
 end
 
 map_sample_helper(::Int,::Tuple,::Tuple,::Val{0}) = ()
@@ -189,7 +192,7 @@ trange(::Val{1}) = (1,)
     x::MapSignalChunk{N,CN,<:FnBr,<:Nothing},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i,x.children,x.chunks,Val{N}())
+    inputs = map_sample_helper(i,x.signals,x.chunks,Val{N}())
 
     map(ch -> x.fn(map(@λ(_[ch]),inputs)...),trange(Val{CN}))
 end
@@ -198,7 +201,7 @@ end
     x::MapSignalChunk{N,CN,<:FnBr,<:Array},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i,x.children,x.chunks,Val{N}())
+    inputs = map_sample_helper(i,x.signals,x.chunks,Val{N}())
 
     map!(ch -> x.fn(map(@λ(_[ch]),inputs)...),x.channels,1:CN)
 end
@@ -207,7 +210,7 @@ end
     x::MapSignalChunk{N,CN,<:Any,<:Nothing},
     i::Int) where {N,CN}
 
-    x.fn(map_sample_helper(i,x.children,x.chunks,Val{N}())...)
+    x.fn(map_sample_helper(i,x.signals,x.chunks,Val{N}())...)
 end
 
 default_pad(x) = zero

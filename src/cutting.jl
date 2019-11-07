@@ -101,8 +101,8 @@ maxchunklen(x::UntilApply,chunk::CutChunk) =
     min(chunk.n,maxchunklen(child(x),child(chunk)))
 function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))
-    childchunk = nextchunk(x,child(chunk),len,skip)
-    CutChunk(x.n - len,childchunk)
+    childchunk = nextchunk(child(x),child(chunk),len,skip)
+    CutChunk(chunk.n - len,childchunk)
 end
 
 nextchunk(x::CutApply,chunk::CutChunk,maxlen,skip) =
