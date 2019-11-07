@@ -86,9 +86,12 @@ function sink!(result::Union{AbstractVector,AbstractMatrix},x;
 end
 
 abstract type AbstractChunk; end
-function sample; end
-function maxchunklen; end
-function nextchunk; end
+function sample
+end
+function maxchunklen
+end
+function nextchunk
+end
 nextchunk(x,chunk,len,skip) = nextchunk(x,chunk,len)
 
 fold(x) = zip(x,Iterators.drop(x,1))
