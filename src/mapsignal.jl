@@ -137,14 +137,6 @@ cleanfn(x) = x
 cleanfn(x::FnBr) = x.fn
 
 testvalue(x) = Tuple(zero(channel_eltype(x)) for _ in 1:nchannels(x))
-struct MapSignalCheckpoint{S,Ch,I,C,N} <: AbstractCheckpoint{S}
-    n::Int
-    channels::Ch
-    indices::I
-    children::C
-    next_children::N
-end
-checkindex(x::MapSignalCheckpoint) = x.n
 
 const MAX_CHANNEL_STACK = 64
 
