@@ -40,7 +40,7 @@ struct NumberChunk{T}
 end
 initchunk(x::NumberSignal) = NumberChunk(x.val,0)
 nextchunk(x::NumberSignal,chunk,maxlen,skip) =
-    NumberChunk(FillArray(x.val,nchannels(x)),maxlen)
+    NumberChunk(Fill(x.val,nchannels(x)),maxlen)
 maxchunklen(x::NumberSignal,chunk) = inflen
 nsamples(chunk::NumberChunk) = chunk.len
 sample(chunk::NumberChunk,i) = chunk.val
