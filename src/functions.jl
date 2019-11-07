@@ -50,18 +50,25 @@ nextchunk(x::NumberSignal,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
 maxchunklen(x::NumberSignal,chunk) = inflen
 nsamples(chunk::FunctionChunk) = chunk.len
 
-sample(chunk::FunctionChunk,i) =
-    chunk.signal.fn(2π*((i/chunk.signal.samplerate*chunk.signal.ω +
-        chunk.signal.ϕ) % 1.0))
+function sample(chunk::FunctionChunk,i)
+    x = chunk.signal
+    x.fn(2π*((i/x.samplerate*x.ω + x.ϕ) % 1.0))
+end
 
-sample(chunk::FunctionChunk{<:SignalFunction{<:Any,Missing}},i) =
-    chunk.signal.fn(i/chunk.signal.samplerate + chunk.signal.ϕ)
+function sample(chunk::FunctionChunk{<:SignalFunction{<:Any,Missing}},i)
+    x = chunk.signal
+    x.fn(i/x.samplerate + x.ϕ)
+end
 
-sample(chunk::FunctionChunk{typeof(sin)},i) =
-    sinpi(2*(i/chunk.signal.samplerate*chunk.signal.ω + chunk.signal.ϕ))
+function sample(chunk::FunctionChunk{<:SignalFunction{typeof(sin)}},i)
+    x = chunk.signal
+    sinpi(2*(i/x.samplerate*x.ω + x.ϕ))
+end
 
-sample(chunk::FunctionChunk{typeof(sin),Missing},i) =
-    sinpi(2*(i/chunk.signal.samplerate + chunk.signal.ϕ))
+function sample(chunk::FunctionChunk{<:SignalFunction{typeof(sin),Missing}},i)
+    x = chunk.signal
+    sinpi(2*(i/x.samplerate + x.ϕ))
+end
 
 tosamplerate(x::SignalFunction,::IsSignal,::ComputedSignal,fs;blocksize) =
     SignalFunction(x.fn,x.first,x.ω,x.ϕ,coalesce(inHz(Float64,fs),x.samplerate))
