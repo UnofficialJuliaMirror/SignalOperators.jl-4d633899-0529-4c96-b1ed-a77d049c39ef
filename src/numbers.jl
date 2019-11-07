@@ -34,8 +34,13 @@ samplerate(x::NumberSignal) = x.samplerate
 tosamplerate(x::NumberSignal{<:Any,<:Any,DB},::IsSignal,::ComputedSignal,
     fs=missing;blocksize) where DB = NumberSignal(x.val,fs,dB=DB)
 
-@Base.propagate_inbounds function sampleat!(result,x::NumberSignal,
-    i::Number,j::Number,check)
-
-    writesink!(result,i,x.val)
+struct NumberChunk{T}
+    val::T
+    len::Int
 end
+initchunk(x::NumberSignal) = NumberChunk(x.val,0)
+nextchunk(x::NumberSignal,chunk,maxlen,skip) =
+    NumberChunk(FillArray(x.val,nchannels(x)),maxlen)
+maxchunklen(x::NumberSignal,chunk) = inflen
+nsamples(chunk::NumberChunk) = chunk.len
+sample(chunk::NumberChunk,i) = chunk.val

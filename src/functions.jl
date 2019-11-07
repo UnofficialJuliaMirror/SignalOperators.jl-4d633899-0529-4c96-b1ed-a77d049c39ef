@@ -41,20 +41,27 @@ function Base.show(io::IO, ::MIME"text/plain",x::SignalFunction)
     end
 end
 
-@Base.propagate_inbounds sampleat!(result,x::SignalFunction,i,j,check) =
-    writesink!(result,i,x.fn(2π*((j/x.samplerate*x.ω + x.ϕ) % 1.0)))
+struct FunctionChunk{T}
+    signal::T
+    len::Int
+end
+initchunk(x::NumberSignal) = FunctionChunk(x,0)
+nextchunk(x::NumberSignal,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
+maxchunklen(x::NumberSignal,chunk) = inflen
+nsamples(chunk::FunctionChunk) = chunk.len
 
-@Base.propagate_inbounds sampleat!(result,
-    x::SignalFunction{<:Any,Missing},i,j,check) =
-    writesink!(result,i,x.fn(j/x.samplerate + x.ϕ))
+sample(chunk::FunctionChunk,i) =
+    chunk.signal.fn(2π*((i/chunk.signal.samplerate*chunk.signal.ω +
+        chunk.signal.ϕ) % 1.0))
 
-@Base.propagate_inbounds sampleat!(result,
-    x::SignalFunction{typeof(sin)},i,j,check) =
-    writesink!(result,i,sinpi(2*(j/x.samplerate*x.ω + x.ϕ)))
+sample(chunk::FunctionChunk{<:SignalFunction{<:Any,Missing}},i) =
+    chunk.signal.fn(i/chunk.signal.samplerate + chunk.signal.ϕ)
 
-@Base.propagate_inbounds sampleat!(result,
-    x::SignalFunction{typeof(sin),Missing},i,j,check) =
-    writesink!(result,i,sinpi(2*(j/x.samplerate + x.ϕ)))
+sample(chunk::FunctionChunk{typeof(sin)},i) =
+    sinpi(2*(i/chunk.signal.samplerate*chunk.signal.ω + chunk.signal.ϕ))
+
+sample(chunk::FunctionChunk{typeof(sin),Missing},i) =
+    sinpi(2*(i/chunk.signal.samplerate + chunk.signal.ϕ))
 
 tosamplerate(x::SignalFunction,::IsSignal,::ComputedSignal,fs;blocksize) =
     SignalFunction(x.fn,x.first,x.ω,x.ϕ,coalesce(inHz(Float64,fs),x.samplerate))
@@ -106,8 +113,5 @@ generator; `rng` defaults to `Random.GLOBAL_RNG`.
 """
 signal(x::typeof(randn),fs::Union{Missing,Number}=missing;rng=Random.GLOBAL_RNG) =
     SignalFunction(RandFn(rng),(randn(rng),),missing,0.0,inHz(Float64,fs))
-@Base.propagate_inbounds function sampleat!(result,
-    x::SignalFunction{<:RandFn,Missing},i,j,check)
 
-    writesink!(result,i,randn(x.fn.rng))
-end
+sample(chunk::FunctionChunk{<:RandFn},i) = randn(chunk.signal.fn.rng)
