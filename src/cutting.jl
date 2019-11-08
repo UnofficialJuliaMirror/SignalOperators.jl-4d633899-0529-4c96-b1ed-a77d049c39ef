@@ -89,9 +89,9 @@ function initchunk(x::AfterApply)
     len = resolvelen(x)
     childchunk = initchunk(child(x))
     while !isnothing(childchunk) && skipped < len
+        skipped += nsamples(childchunk)
         childchunk = nextchunk(child(x),childchunk,len - skipped,true)
         isnothing(childchunk) && break
-        skipped += nsamples(childchunk)
     end
     if skipped < len
         io = IOBuffer()
@@ -105,7 +105,7 @@ function initchunk(x::AfterApply)
     CutChunk(0,childchunk)
 end
 nextchunklen(x::AfterApply,chunk::CutChunk,maxlen,skip) =
-    min(maxlen,nextchunklen(child(x),child(chunk)))
+    nextchunklen(child(x),child(chunk),maxlen,skip)
 function nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip)
     childchunk = nextchunk(child(x),child(chunk),maxlen,skip)
     if !isnothing(childchunk)

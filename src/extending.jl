@@ -72,11 +72,11 @@ function initchunk(x::AppendSignals)
     while k < K && isnothing(chunk)
         chunk = initchunk(x.signals[k])
     end
-    AppendChunk(x.signals[k],chunk,Ref(nothing),k)
+    AppendChunk(x.signals[k],chunk,Ref{Any}(nothing),k)
 end
 
 function nextchunklen(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
-    curlen = nextchunklen(chunk.signal,chunk.child)
+    curlen = nextchunklen(chunk.signal,chunk.child,maxlen,skip)
 
     if curlen > 0
         chunk.init[] = chunk.k, chunk.child
@@ -305,7 +305,7 @@ end
 
 function nextchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     clen = nextchunklen(child(x),child(chunk),maxlen,skip)
-    clen == 0 ? inflen : clen
+    clen = clen == 0 ? inflen : clen
     min(maxlen,clen)
 end
 nextchunklen(x::PaddedSignal,::PadChunk,maxlen,skip) = min(maxlen,inflen)

@@ -218,7 +218,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
             fs = 3
             a = signal(2,fs) |> tochannels(nch) |> until(2s) |>
                 append(signal(3,fs)) |> until(4s)
-            nsamples(sink(a)) == 4*fs
+            @test nsamples(sink(a)) == 4*fs
 
             x = append(
                     rand(10,nch) |> after(0.5s),
