@@ -92,10 +92,14 @@ timedim(x::AxTimeD2) = 2
 
 initchunk(x::AxTime) = ArrayChunk(0,1:0)
 function nextchunk(x::AxTime,chunk::ArrayChunk,maxlen,skip)
-    len = min(maxlen,maxchunklen(x,chunk))
     offset = chunk.offset + nsamples(chunk)
-    indices = offset .+ (1:len)
-    array_chunk_helper(x,offset,indices)
+    if offset < nsamples(x)
+        len = min(maxlen,maxchunklen(x,chunk))
+        indices = offset .+ (1:len)
+        array_chunk_helper(x,offset,indices)
+    else
+        nothing
+    end
 end
 array_chunk_helper(x::AxTimeD1,offset,indices) =
     ArrayChunk(offset, view(x,indices,:))

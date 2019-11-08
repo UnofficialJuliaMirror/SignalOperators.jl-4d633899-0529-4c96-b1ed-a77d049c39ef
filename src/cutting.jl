@@ -88,24 +88,31 @@ initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
 function initchunk(x::AfterApply)
     skipped = 0
     len = resolvelen(x)
-    chunk = initchunk(child(x))
-    while !isnothing(chunk) && skipped < len
-        chunk = nextchunk(x,chunk,len - skipped,true)
-        skipped += nsamples(chunk)
+    childchunk = initchunk(child(x))
+    while !isnothing(childchunk) && skipped < len
+        childchunk = nextchunk(child(x),childchunk,len - skipped,true)
+        skipped += nsamples(childchunk)
     end
     @assert skipped == len
-    CutChunk(len,chunk)
+    CutChunk(len,childchunk)
 end
 
 maxchunklen(x::UntilApply,chunk::CutChunk) =
     min(chunk.n,maxchunklen(child(x),child(chunk)))
 function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))
-    childchunk = nextchunk(child(x),child(chunk),len,skip)
-    CutChunk(chunk.n - len,childchunk)
+    if len > 0
+        childchunk = nextchunk(child(x),child(chunk),len,skip)
+        CutChunk(chunk.n - len,childchunk)
+    else
+        nothing
+    end
 end
 
-nextchunk(x::CutApply,chunk::CutChunk,maxlen,skip) =
-    CutChunk(nextchunk(x,child(chunk),maxlen,skip))
+maxchunklen(x::AfterApply,chunk::CutChunk) =
+    max(0,maxchunklen(child(x),child(chunk))-chunk.n)
+nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip) =
+    CutChunk(chunk.n,nextchunk(child(x),child(chunk),maxlen,skip))
+
 nsamples(x::CutChunk) = nsamples(child(x))
 @Base.propagate_inbounds sample(x::CutChunk,i) = sample(child(x),i)

@@ -92,12 +92,6 @@ function nextchunk(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
     end
 end
 
-@Base.propagate_inbounds function sampleat!(result,x::AppendSignals,
-    i,j,check)
-
-    sampleat!(result,check.signal,i,j-check.offset,check.child)
-end
-
 Base.show(io::IO,::MIME"text/plain",x::AppendSignals) = pprint(io,x)
 function PrettyPrinting.tile(x::AppendSignals)
     if length(x.signals) == 2
@@ -230,18 +224,18 @@ can be passed as the second argument to  [`pad`](@ref).
     x[helper(i,end),j]
 end
 
-usepad(x::PaddedSignal,check) = usepad(x,SignalTrait(x),check)
-usepad(x::PaddedSignal,s::IsSignal,check) = usepad(x,s,x.pad,check)
-usepad(x::PaddedSignal,s::IsSignal{T},p::Number,check) where T =
+usepad(x::PaddedSignal,chunk) = usepad(x,SignalTrait(x),chunk)
+usepad(x::PaddedSignal,s::IsSignal,chunk) = usepad(x,s,x.pad,chunk)
+usepad(x::PaddedSignal,s::IsSignal{T},p::Number,chunk) where T =
     Fill(convert(T,p),nchannels(x.signal))
 function usepad(x::PaddedSignal,s::IsSignal{T},
-    p::Union{Array,Tuple},check) where T
+    p::Union{Array,Tuple},chunk) where T
 
     map(x -> convert(T,x),p)
 end
-usepad(x::PaddedSignal,s::IsSignal,::typeof(lastsample),check) =
-    sampleat!(one_sample,x,1,nsamples(x.signal),check)
-function usepad(x::PaddedSignal,s::IsSignal{T},fn::Function,check) where T
+usepad(x::PaddedSignal,s::IsSignal,::typeof(lastsample),chunk) =
+    sample(chunk,nsamples(chunk))
+function usepad(x::PaddedSignal,s::IsSignal{T},fn::Function,chunk) where T
     nargs = map(x -> x.nargs - 1, methods(fn).ms)
     if 3 ∈ nargs
         if indexable(x.signal)
@@ -275,6 +269,7 @@ const use_pad = UsePad()
 struct PadChunk{P,C} <: AbstractChunk
     pad::P
     child_or_len::C
+    offset::Int
 end
 child(x::PadChunk{<:Nothing}) = x.child_or_len
 child(x::PadChunk) = nothing
@@ -282,7 +277,7 @@ nsamples(x::PadChunk{<:Nothing}) = nsamples(child(x))
 nsamples(x::PadChunk) = x.child_or_len
 
 sample(x::PadChunk{<:Nothing},i) = sample(child(x),i)
-sample(x::PadChunk{<:Function},i) = x.pad(i)
+sample(x::PadChunk{<:Function},i) = x.pad(i + x.offset)
 sample(x::PadChunk,i) = x.pad
 
 function initchunk(x::PaddedSignal)
@@ -290,25 +285,27 @@ function initchunk(x::PaddedSignal)
     if maxchunklen(child(x),chunk) == 0
         PadChunk(usepad(x,chunk),0)
     else
-        PadChunk(nothing,chunk)
+        PadChunk(nothing,chunk,0)
     end
 end
 
-maxchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing}) =
-    maxchunklen(child(x),child(chunk))
+function maxchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing})
+    clen = maxchunklen(child(x),child(chunk))
+    clen == 0 ? inflen : clen
+end
 maxchunklen(x::PaddedSignal,::PadChunk) = inflen
 function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))
     childchunk = nextchunk(child(x),child(chunk),len,skip)
     if isnothing(childchunk)
-        PadChunk(usepad(x,chunk),len)
+        PadChunk(usepad(x,chunk),len,nsamples(chunk) + chunk.offset)
     else
-        PadChunk(nothing,childchunk)
+        PadChunk(nothing,childchunk,nsamples(chunk) + chunk.offset)
     end
 end
 function nextchunk(x::PaddedSignal,chunk::PadChunk,maxlen,skip)
     len = min(maxlen,maxchunklen(x,chunk))
-    PadChunk(chunk.pad,len)
+    PadChunk(chunk.pad,len,nsamples(chunk) + chunk.offset)
 end
 
 Base.show(io::IO,::MIME"text/plain",x::PaddedSignal) = pprint(io,x)
