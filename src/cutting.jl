@@ -104,8 +104,8 @@ function initchunk(x::AfterApply)
     @assert skipped == len
     CutChunk(0,childchunk)
 end
-maxchunklen(x::AfterApply,chunk::CutChunk,maxlen,skip) =
-    min(maxlen,maxchunklen(child(x),child(chunk)))
+nextchunklen(x::AfterApply,chunk::CutChunk,maxlen,skip) =
+    min(maxlen,nextchunklen(child(x),child(chunk)))
 function nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip)
     childchunk = nextchunk(child(x),child(chunk),maxlen,skip)
     if !isnothing(childchunk)
@@ -114,10 +114,10 @@ function nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip)
 end
 
 initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
-maxchunklen(x::UntilApply,chunk::CutChunk,maxlen,skip) =
-    maxchunklen(child(x),child(chunk),chunk.n - nsamples(chunk),skip)
+nextchunklen(x::UntilApply,chunk::CutChunk,maxlen,skip) =
+    nextchunklen(child(x),child(chunk),chunk.n - nsamples(chunk),skip)
 function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     if len > 0
         childchunk = nextchunk(child(x),child(chunk),len,skip)
         CutChunk(chunk.n - nsamples(chunk),childchunk)

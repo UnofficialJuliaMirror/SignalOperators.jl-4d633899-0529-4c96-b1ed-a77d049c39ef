@@ -72,17 +72,17 @@ initchunk(x::RampSignal{:on}) =
     RampChunk{:on}(x,x.fn,resolvelen(x),nsamples(x),0,0)
 initchunk(x::RampSignal{:off}) =
     RampChunk{:off}(x,nothing,nsamples(x) - resolvelen(x),nsamples(x),0)
-maxchunklen(x::RampSignal{:on},chunk::RampChunk,maxlen,skip) =
+nextchunklen(x::RampSignal{:on},chunk::RampChunk,maxlen,skip) =
     min(maxlen,chunk.marker - chunk.offset)
-maxchunklen(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip) =
+nextchunklen(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip) =
     min(maxlen,chunk.stop - chunk.offset)
-maxchunklen(x::RampSignal{:off},chunk::RampChunk,maxlen,skip) =
+nextchunklen(x::RampSignal{:off},chunk::RampChunk,maxlen,skip) =
     min(maxlen,chunk.marker - chunk.offset)
-maxchunklen(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip) =
+nextchunklen(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip) =
     min(maxlen,chunk.stop - chunk.offset)
 
 function nextchunk(x::RampSignal{:on},chunk::RampChunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk{:on}(x,x.fn,chunk.marker,chunk.stop,offset,len)
@@ -92,13 +92,13 @@ function nextchunk(x::RampSignal{:on},chunk::RampChunk,maxlen,skip)
 end
 
 function nextchunk(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     offset = chunk.offset + chunk.len
     RampChunk{:on}(x,nothing,chunk.marker,chunk.stop,offset,len)
 end
 
 function nextchunk(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk{:off}(x,nothing,chunk.marker,chunk.stop,offset,len)
@@ -108,7 +108,7 @@ function nextchunk(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip)
 end
 
 function nextchunk(x::RampSignal{:off},chunk::RampChunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     offset = chunk.offset + chunk.len
     RampChunk{:off}(x,x.fn,chunk.marker,chunk.stop,offset,len)
 end

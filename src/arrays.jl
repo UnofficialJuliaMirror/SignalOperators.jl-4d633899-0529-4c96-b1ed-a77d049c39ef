@@ -86,7 +86,7 @@ end
 nsamples(x::ArrayChunk) = size(x.ar,1)
 sample(x::ArrayChunk,i) = view(x.ar,i,:)
 
-maxchunklen(x::AxTime,chunk::ArrayChunk,maxlen,skip) =
+nextchunklen(x::AxTime,chunk::ArrayChunk,maxlen,skip) =
     min(maxlen,size(x,timedim(x)) - chunk.offset)
 timedim(x::AxTimeD1) = 1
 timedim(x::AxTimeD2) = 2
@@ -95,7 +95,7 @@ initchunk(x::AxTime) = ArrayChunk(0,1:0)
 function nextchunk(x::AxTime,chunk::ArrayChunk,maxlen,skip)
     offset = chunk.offset + nsamples(chunk)
     if offset < nsamples(x)
-        len = maxchunklen(x,chunk,maxlen,skip)
+        len = nextchunklen(x,chunk,maxlen,skip)
         indices = offset .+ (1:len)
         array_chunk_helper(x,offset,indices)
     else

@@ -47,7 +47,7 @@ struct FunctionChunk{T}
 end
 initchunk(x::SignalFunction) = FunctionChunk(x,0)
 nextchunk(x::SignalFunction,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
-maxchunklen(x::SignalFunction,chunk,maxlen,skip) = min(maxlen,inflen)
+nextchunklen(x::SignalFunction,chunk,maxlen,skip) = min(maxlen,inflen)
 nsamples(chunk::FunctionChunk) = chunk.len
 
 function sample(chunk::FunctionChunk,i)

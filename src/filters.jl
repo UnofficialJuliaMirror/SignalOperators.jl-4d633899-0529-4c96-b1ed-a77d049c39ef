@@ -237,10 +237,10 @@ function initchunk(x::FilteredSignal)
     FilterChunk(0,0,state)
 end
 
-maxchunklen(x::FilteredSignal,chunk,maxlen,skip) =
+nextchunklen(x::FilteredSignal,chunk,maxlen,skip) =
     min(chunk.state.last_output_offset - chunk.n,maxlen)
 function nextchunk(x::FilteredSignal,chunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     n = chunk.n + chunk.len
     state = prepare_state!(x,chunk.state,n+len)
 
@@ -334,10 +334,10 @@ function initchunk(x::NormedSignal)
     NormedChunk(0,0,vals)
 end
 
-maxchunklen(x::NormedSignal,chunk,maxlen,skip) =
+nextchunklen(x::NormedSignal,chunk,maxlen,skip) =
     min(maxlen,nsamples(x) - chunk.offset)
 function nextchunk(x::NormedSignal,chunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     NormedChunk(chunk.offset + chunk.len, len, chunk.vals)
 end
 

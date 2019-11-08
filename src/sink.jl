@@ -88,7 +88,7 @@ end
 abstract type AbstractChunk; end
 function sample
 end
-function maxchunklen
+function nextchunklen
 end
 function nextchunk
 end

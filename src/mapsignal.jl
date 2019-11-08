@@ -163,13 +163,13 @@ function initchunk(x::MapSignal{Fn,N,CN}) where {Fn,N,CN}
     MapSignalChunk{N,CN,Fn,Ch,C,S}(x.fn,0,channels,chunks,x.padded_signals)
 end
 
-maxchunklen(x::MapSignal,chunk::MapSignalChunk,maxlen,skip) =
-    minimum(maxchunklen.(x.padded_signals,chunk.chunks,maxlen,skip))
-maxchunklen(x::MapSignal,inits::Tuple,maxlen,skip) =
-    minimum(maxchunklen.(x.padded_signals,inits,maxlen,skip))
+nextchunklen(x::MapSignal,chunk::MapSignalChunk,maxlen,skip) =
+    minimum(nextchunklen.(x.padded_signals,chunk.chunks,maxlen,skip))
+nextchunklen(x::MapSignal,inits::Tuple,maxlen,skip) =
+    minimum(nextchunklen.(x.padded_signals,inits,maxlen,skip))
 
 function nextchunk(x::MapSignal{Fn,N,CN},chunk,maxlen,skip) where {Fn,N,CN}
-    maxlen = maxchunklen(x,chunk,maxlen,skip)
+    maxlen = nextchunklen(x,chunk,maxlen,skip)
     channels = chunk.channels
     chunks = nextchunk.(x.padded_signals,chunk.chunks,maxlen,skip)
     Ch,C,S = typeof(channels),typeof(chunks),typeof(x.padded_signals)

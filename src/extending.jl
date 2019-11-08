@@ -75,26 +75,26 @@ function initchunk(x::AppendSignals)
     AppendChunk(x.signals[k],chunk,Ref{Any}(nothing),k)
 end
 
-function maxchunklen(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
+function nextchunklen(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
     # TODO: fix
-    curlen = maxchunklen(chunk.signal,chunk.child)
+    curlen = nextchunklen(chunk.signal,chunk.child)
     k = chunk.k
     K = length(x.signals)
     if curlen == 0 && !isnothing(chunk.nextchunk[])
         k,chunk = chunk.nextchunk[]
-        curlen = maxchunklen(x.signals[k],chunk)
+        curlen = nextchunklen(x.signals[k],chunk)
     else
         while curlen == 0 && k < K
             k += 1
             chunk.nextchunk[] = (k,initchunk(x.signals[k]))
-            curlen = maxchunklen(x.signals[k],chunk.nextchunk[][2])
+            curlen = nextchunklen(x.signals[k],chunk.nextchunk[][2])
         end
     end
     curlen
 end
 
 function nextchunk(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
 
     if !isnothing(chunk.nextchunk[])
         k,childchunk = chunk.nextchunk[]
@@ -310,20 +310,20 @@ sample(x::PadChunk,i) = x.pad
 
 function initchunk(x::PaddedSignal)
     chunk = initchunk(child(x))
-    if maxchunklen(child(x),chunk,inflen,false) == 0
+    if nextchunklen(child(x),chunk,inflen,false) == 0
         PadChunk(usepad(x,chunk),0)
     else
         PadChunk(nothing,chunk,0)
     end
 end
 
-function maxchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
-    clen = maxchunklen(child(x),child(chunk),maxlen,skip)
+function nextchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
+    clen = nextchunklen(child(x),child(chunk),maxlen,skip)
     clen == 0 ? inflen : clen
 end
-maxchunklen(x::PaddedSignal,::PadChunk,maxlen,skip) = min(maxlen,inflen)
+nextchunklen(x::PaddedSignal,::PadChunk,maxlen,skip) = min(maxlen,inflen)
 function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     childchunk = nextchunk(child(x),child(chunk),len,skip)
     if isnothing(childchunk)
         PadChunk(usepad(x,chunk),len,nsamples(chunk) + chunk.offset)
@@ -332,7 +332,7 @@ function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     end
 end
 function nextchunk(x::PaddedSignal,chunk::PadChunk,maxlen,skip)
-    len = maxchunklen(x,chunk,maxlen,skip)
+    len = nextchunklen(x,chunk,maxlen,skip)
     PadChunk(chunk.pad,len,nsamples(chunk) + chunk.offset)
 end
 
