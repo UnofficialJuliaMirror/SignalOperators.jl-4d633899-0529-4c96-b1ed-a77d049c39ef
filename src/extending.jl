@@ -306,6 +306,7 @@ end
 function nextchunklen(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)
     clen = nextchunklen(child(x),child(chunk),maxlen,skip)
     clen == 0 ? inflen : clen
+    min(maxlen,clen)
 end
 nextchunklen(x::PaddedSignal,::PadChunk,maxlen,skip) = min(maxlen,inflen)
 function nextchunk(x::PaddedSignal,chunk::PadChunk{<:Nothing},maxlen,skip)

@@ -115,7 +115,7 @@ end
 
 initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
 nextchunklen(x::UntilApply,chunk::CutChunk,maxlen,skip) =
-    nextchunklen(child(x),child(chunk),chunk.n - nsamples(chunk),skip)
+    min(maxlen,nextchunklen(child(x),child(chunk),chunk.n - nsamples(chunk),skip))
 function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
     len = nextchunklen(x,chunk,maxlen,skip)
     if len > 0
