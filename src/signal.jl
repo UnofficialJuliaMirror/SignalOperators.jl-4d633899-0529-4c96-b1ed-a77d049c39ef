@@ -34,6 +34,7 @@ end
 indexable(x::AbstractArray) = true
 indexable(x) = false
 
+nosignal(::Nothing) = error("Value is not a signal: nothing")
 nosignal(x) = error("Value is not a signal: $x")
 
 """

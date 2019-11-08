@@ -84,19 +84,35 @@ struct CutChunk{C} <: AbstractChunk
 end
 child(x::CutChunk) = x.child
 
-initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
 function initchunk(x::AfterApply)
     skipped = 0
     len = resolvelen(x)
     childchunk = initchunk(child(x))
     while !isnothing(childchunk) && skipped < len
         childchunk = nextchunk(child(x),childchunk,len - skipped,true)
+        isnothing(childchunk) && break
         skipped += nsamples(childchunk)
     end
+    if skipped < len
+        io = IOBuffer()
+        signalshow(io,child(x))
+        sig_string = String(take!(io))
+
+        error("Signal is too short to skip $(maybeseconds(x.time)): ",
+            sig_string)
+    end
     @assert skipped == len
-    CutChunk(len,childchunk)
+    CutChunk(0,childchunk)
+end
+maxchunklen(x::AfterApply,chunk::CutChunk) = maxchunklen(child(x),child(chunk))
+function nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip)
+    childchunk = nextchunk(child(x),child(chunk),maxlen,skip)
+    if !isnothing(childchunk)
+        CutChunk(0,childchunk)
+    end
 end
 
+initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
 maxchunklen(x::UntilApply,chunk::CutChunk) =
     min(chunk.n,maxchunklen(child(x),child(chunk)))
 function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
@@ -108,11 +124,6 @@ function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
         nothing
     end
 end
-
-maxchunklen(x::AfterApply,chunk::CutChunk) =
-    max(0,maxchunklen(child(x),child(chunk))-chunk.n)
-nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip) =
-    CutChunk(chunk.n,nextchunk(child(x),child(chunk),maxlen,skip))
 
 nsamples(x::CutChunk) = nsamples(child(x))
 @Base.propagate_inbounds sample(x::CutChunk,i) = sample(child(x),i)

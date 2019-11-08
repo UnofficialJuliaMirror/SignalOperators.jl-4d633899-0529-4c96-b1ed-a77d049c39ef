@@ -56,7 +56,7 @@ tosamplerate(x::AppendSignals,s::IsSignal{<:Any,<:Number},c::ComputedSignal,fs;b
 tosamplerate(x::AppendSignals,s::IsSignal{<:Any,Missing},__ignore__,fs;
     blocksize) = append(tosamplerate.(x.signals,fs;blocksize=blocksize)...)
 
-struct AppendChunk{Si,S,C} <: AbstractChunk
+struct AppendChunk{S,C} <: AbstractChunk
     signal::S
     child::C
     k::Int
@@ -68,7 +68,7 @@ function initchunk(x::AppendSignals)
     k = 1
     chunk = initchunk(x.signals[k])
     K = length(x.signals)
-    while k < K && maxchunklen(x.signals[k],chunk) == 0
+    while k < K && isnothing(chunk)
         chunk = initchunk(x.signals[k])
     end
     AppendChunk(x.signals[k],chunk,k)

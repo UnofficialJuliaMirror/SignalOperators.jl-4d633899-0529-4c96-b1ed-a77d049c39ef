@@ -157,6 +157,8 @@ progress = Progress(total_test_groups,desc="Running tests...")
             cutarray2 = signal(x,6Hz) |> until(0.5s)
             @test sink(cutarray) == sink(cutarray2)
 
+            @test_throws ErrorException signal(1:10,5Hz) |> after(3s) |> sink
+
             x = rand(12,nch) |> signal(6Hz)
             @test append(until(x,1s),after(x,1s)) |> nsamples == 12
 
@@ -216,7 +218,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
             x = append(
                     rand(10,nch) |> after(0.5s),
                     signal(sin) |> tochannels(nch) |> until(0.5s)) |>
-                tosamplerate(2kHz) |> sink
+                tosamplerate(20Hz) |> sink
             @test duration(x) ≈ 0.5
 
             @test_throws ErrorException append(sin,1:10)
@@ -374,8 +376,6 @@ progress = Progress(total_test_groups,desc="Running tests...")
 
             x = rand(10,nch) |> tosamplerate(2kHz) |> sink
             @test samplerate(x) == 2000
-
-
 
             toned = tone |> sink
             resamp = tosamplerate(toned,40Hz)
