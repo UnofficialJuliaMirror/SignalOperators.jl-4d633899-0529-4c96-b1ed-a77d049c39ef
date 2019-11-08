@@ -68,7 +68,7 @@ function initchunk(x::AppendSignals)
     k = 1
     chunk = initchunk(x.signals[k])
     K = length(x.signals)
-    while maxchunklen(chunk) == 0 && k < K
+    while k < K && maxchunklen(x.signals[k],chunk) == 0
         chunk = initchunk(x.signals[k])
     end
     AppendChunk(x.signals[k],chunk,k)
