@@ -215,6 +215,11 @@ progress = Progress(total_test_groups,desc="Running tests...")
             @test duration(tones) == 10
             @test nsamples(sink(tones)) == 220
 
+            fs = 3
+            a = signal(2,fs) |> tochannels(nch) |> until(2s) |>
+                append(signal(3,fs)) |> until(4s)
+            nsamples(sink(a)) == 4*fs
+
             x = append(
                     rand(10,nch) |> after(0.5s),
                     signal(sin) |> tochannels(nch) |> until(0.5s)) |>
@@ -249,7 +254,8 @@ progress = Progress(total_test_groups,desc="Running tests...")
     @testset "Handling of padded mix and amplify" begin
         for nch in 1:2
             fs = 3Hz
-            a = signal(2,fs) |> tochannels(nch) |> until(2s) |> append(signal(3,fs)) |> until(4s)
+            a = signal(2,fs) |> tochannels(nch) |> until(2s) |>
+                append(signal(3,fs)) |> until(4s)
             b = signal(3,fs) |> tochannels(nch) |> until(3s)
 
             result = mix(a,b) |> sink
