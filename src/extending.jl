@@ -59,7 +59,7 @@ tosamplerate(x::AppendSignals,s::IsSignal{<:Any,Missing},__ignore__,fs;
 struct AppendChunk{S,C} <: AbstractChunk
     signal::S
     child::C
-    nextchunk::Ref{Any}
+    init::Ref{Any}
     k::Int
 end
 nsamples(x::AppendChunk) = nsamples(x.child)
@@ -72,48 +72,34 @@ function initchunk(x::AppendSignals)
     while k < K && isnothing(chunk)
         chunk = initchunk(x.signals[k])
     end
-    AppendChunk(x.signals[k],chunk,Ref{Any}(nothing),k)
+    AppendChunk(x.signals[k],chunk,Ref(nothing),k)
 end
 
 function nextchunklen(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
-    # TODO: fix
     curlen = nextchunklen(chunk.signal,chunk.child)
-    k = chunk.k
-    K = length(x.signals)
-    if curlen == 0 && !isnothing(chunk.nextchunk[])
-        k,chunk = chunk.nextchunk[]
-        curlen = nextchunklen(x.signals[k],chunk)
+
+    if curlen > 0
+        chunk.init[] = chunk.k, chunk.child
+        curlen
     else
-        while curlen == 0 && k < K
+        k = chunk.k
+        K = length(x.signals)
+        nextchild = chunk.child
+        while k < K && curlen == 0
             k += 1
-            chunk.nextchunk[] = (k,initchunk(x.signals[k]))
-            curlen = nextchunklen(x.signals[k],chunk.nextchunk[][2])
+            nextchild = initchunk(x.signals[k])
+            curlen = nextchunklen(x.signals[k],nextchild,maxlen,skip)
         end
+        chunk.init[] = (k,nextchild)
+        curlen
     end
-    curlen
 end
 
 function nextchunk(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
     len = nextchunklen(x,chunk,maxlen,skip)
 
-    if !isnothing(chunk.nextchunk[])
-        k,childchunk = chunk.nextchunk[]
-        chunk.nextchunk[] = nothing
-    else
-        k,childchunk = chunk.k,chunk.child
-    end
+    k,childchunk = chunk.init[]
     childchunk = nextchunk(x.signals[k],childchunk,maxlen,skip)
-    K = length(x.signals)
-    while isnothing(childchunk) && k < K
-        if !isnothing(chunk.nextchunk[])
-            k,childchunk = chunk.nextchunk[]
-            chunk.nextchunk[] = nothing
-        else
-            k += 1
-            childchunk = initchunk(x.signals[k])
-        end
-        childchunk = nextchunk(x.signals[k],childchunk,maxlen,skip)
-    end
 
     if !isnothing(childchunk)
         AppendChunk(x.signals[k],childchunk,Ref{Any}(nothing),k)
