@@ -240,7 +240,7 @@ end
 nextchunklen(x::FilteredSignal,chunk,maxlen,skip) =
     min(chunk.state.last_output_offset - chunk.n,maxlen)
 function nextchunk(x::FilteredSignal,chunk,maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+    len = min(maxlen,x.blocksize)
     n = chunk.n + chunk.len
     state = prepare_state!(x,chunk.state,n+len)
 
@@ -250,6 +250,7 @@ end
 function prepare_state!(x,state,index)
     if state.last_output_offset+1 ≤ index
         # drop any samples that we do not wish to generate output for
+        # TODO: need to figure out chunk length here
         if state.last_output_offset+1 < index
             recurse_len = index - (state.last_output_offset + 1)
             sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
