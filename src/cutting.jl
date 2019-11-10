@@ -112,6 +112,8 @@ function nextchunk(x::AfterApply,chunk::CutChunk,maxlen,skip)
         CutChunk(0,childchunk)
     end
 end
+nextchunklen(x::AfterApply,chunk::CutChunk{Nothing},maxlen,skip) = 0
+nextchunk(x::AfterApply,chunk::CutChunk{Nothing},maxlen,skip) = nothing
 
 initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
 nextchunklen(x::UntilApply,chunk::CutChunk,maxlen,skip) =
@@ -127,4 +129,5 @@ function nextchunk(x::UntilApply,chunk::CutChunk,maxlen,skip)
 end
 
 nsamples(x::CutChunk) = nsamples(child(x))
+nsamples(x::CutChunk{Nothing}) = 0
 @Base.propagate_inbounds sample(x::CutChunk,i) = sample(child(x),i)
