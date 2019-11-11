@@ -155,13 +155,22 @@ function prepare_channels(x::MapSignal)
         nothing
 end
 
-function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,chunk=nothing) where {Fn,N,CN}
-    channels = !isnothing(chunk) ? chunk.channels : prepare_channels(x)
+struct EmptyChildChunk
+end
+const emptychild = EmptyChildChunk()
+nsamples(::EmptyChildChunk) = 0
+nextchunk(x,maxlen,skip,::EmptyChildChunk) = nextchunk(x,maxlen,skip)
+
+initchunk(x::MapSignal{<:Any,N}) where N =
+    MapSignalChunk(0,prepare_channels(x),[emptychild for _ in 1:N],
+        Tuple(zeros(N)))
+function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,
+    chunk::MapSignalChunk=initchunk(x)) where {Fn,N,CN}
 
     offsets = map(@λ(_ + nsamples(chunk)),chunk.offsets)
-    chunks = map(chunk.chunks,offsets) do childchunk, offset
+    chunks = map(x.padded_signals,chunk.chunks,offsets) do sig, childchunk, offset
         if offset == nsamples(childchunk)
-            nextchunk(x,maxlen,skip,childchunk)
+            nextchunk(sig,maxlen,skip,childchunk)
         else
             childchunk
         end
@@ -173,20 +182,8 @@ function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,chunk=nothing) where {Fn,N,
     # parent chunk
     len = minimum(nsamples.(chunks) .- offsets)
 
-    Ch,C,O = typeof(channels), typeof(chunks), offsets,
-        typeof(x.padded_signals)
-    MapSignalChunk{Ch,C,O}(len,channels,chunks)
-end
-
-map_sample_helper(::Tuple,::Tuple,::Tuple,::Val{0}) = ()
-function map_sample_helper(
-    ii::Tuple,
-    children::Tuple,
-    chunks::Tuple,
-    ::Val{N}) where N
-
-    (map_sample_helper(ii[N],children,chunks,Val{N-1}())...,
-        sample(children[N],chunks[N],ii[N]))
+    Ch, C, O = typeof(chunk.channels), typeof(chunks), typeof(offsets)
+    MapSignalChunk{Ch,C,O}(len,chunk.channels,chunks,offsets)
 end
 
 trange(::Val{N}) where N = (trange(Val(N-1))...,N)
@@ -196,9 +193,7 @@ trange(::Val{1}) = (1,)
     chunk::MapSignalChunk{<:Nothing},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i .+ chunk.offsets,
-        x.padded_signals,chunk.chunks,Val{N}())
-
+    inputs = sample.(x.padded_signals,chunk.chunks,i .+ chunk.offsets)
     map(ch -> x.fn(map(@λ(_[ch]),inputs)...),trange(Val{CN}()))
 end
 
@@ -207,9 +202,7 @@ end
     chunk::MapSignalChunk{<:Array},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i .+ chunk.ofsets,x.padded_signals,
-        chunk.chunks,Val{N}())
-
+    inputs = sample.(x.padded_signals,chunk.chunks,i .+ chunk.offsets)
     map!(ch -> x.fn(map(@λ(_[ch]),inputs)...),chunk.channels,1:CN)
 end
 
@@ -218,8 +211,7 @@ end
     chunk::MapSignalChunk{<:Nothing},
     i::Int) where {N,CN}
 
-    x.fn(map_sample_helper(i .+ chunk.offsets,x.padded_signals,
-        chunk.chunks,Val{N}())...)
+    x.fn(sample.(x.padded_signals,chunk.chunks,i .+ chunk.offsets)...)
 end
 
 default_pad(x) = zero

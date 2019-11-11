@@ -37,6 +37,6 @@ tosamplerate(x::NumberSignal{<:Any,<:Any,DB},::IsSignal,::ComputedSignal,
 struct NumberChunk
     len::Int
 end
-nextchunk(x::NumberSignal,len,skip,chunk=nothing) = NumberChunk(len)
-nsamples(x,chunk::NumberChunk) = chunk.len
+nextchunk(x::NumberSignal,len,skip,chunk::NumberChunk=NumberChunk(0)) = NumberChunk(len)
+nsamples(chunk::NumberChunk) = chunk.len
 sample(x,chunk::NumberChunk,i) = x.val

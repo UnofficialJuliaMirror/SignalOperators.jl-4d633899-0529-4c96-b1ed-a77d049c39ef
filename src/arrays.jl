@@ -83,7 +83,7 @@ struct ArrayChunk{A} <: AbstractChunk
     offset::Int
     ar::A
 end
-nsamples(x,chunk::ArrayChunk) = size(chunk.ar,1)
+nsamples(chunk::ArrayChunk) = size(chunk.ar,1)
 @Base.propagate_inbounds sample(x,chunk::ArrayChunk,i) = view(chunk.ar,i)
 
 function nextchunk(x::AxTime,maxlen,skip,chunk::ArrayChunk = ArrayChunk(0,1:0))

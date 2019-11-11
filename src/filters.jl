@@ -219,7 +219,7 @@ inputlength(x::DSP.Filters.Filter,n) = DSP.inputlength(x,n)
 outputlength(x::DSP.Filters.Filter,n) = DSP.outputlength(x,n)
 
 function nextchunk(x::FilteredSignal,maxlen,skip,
-    chunk=FilterChunk(0,0,FilterState(x)))
+    chunk::FilterChunk=FilterChunk(0,0,FilterState(x)))
 
     len = min(maxlen,x.blocksize)
     n = chunk.n + chunk.len
@@ -235,7 +235,7 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
             recurse_len = index - (chunk.last_output_offset + 1)
             recusre_chunk = FilterChunk(0,chunk.last_output_offset,state)
             sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
-                  nextchunk(x,recusre_chunk,recurse_len,true))
+                  nextchunk(x,recurse_len,true,recusre_chunk))
         end
         @assert state.last_output_offset+1 ≥ index
 
@@ -319,7 +319,7 @@ function initchunk(x::NormedSignal)
     NormedChunk(0,0,vals)
 end
 
-function nextchunk(x::NormedSignal,maxlen,skip,chunk)
+function nextchunk(x::NormedSignal,maxlen,skip,chunk::NormedChunk)
     len = min(maxlen,nsamples(x) - chunk.offset)
     NormedChunk(chunk.offset + chunk.len, len, chunk.vals)
 end

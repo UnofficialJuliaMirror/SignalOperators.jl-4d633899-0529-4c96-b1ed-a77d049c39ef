@@ -44,8 +44,9 @@ end
 struct FunctionChunk
     len::Int
 end
-nextchunk(x::SignalFunction,maxlen,skip,chunk=nothing) = FunctionChunk(maxlen)
-nsamples(x,chunk::FunctionChunk) = chunk.len
+nextchunk(x::SignalFunction,maxlen,skip) = FunctionChunk(maxlen)
+nextchunk(x::SignalFunction,maxlen,skip,::FunctionChunk) = FunctionChunk(maxlen)
+nsamples(chunk::FunctionChunk) = chunk.len
 
 sample(x,chunk::FunctionChunk,i) = x.fn(2π*((i/x.samplerate*x.ω + x.ϕ) % 1.0))
 sample(x::SignalFunction{<:Any,Missing},chunk::FunctionChunk,i) =
@@ -107,4 +108,4 @@ signal(x::typeof(randn),fs::Union{Missing,Number}=missing;rng=Random.GLOBAL_RNG)
     SignalFunction(RandFn(rng),(randn(rng),),missing,0.0,inHz(Float64,fs))
 
 sample(x::SignalFunction{<:RandFn,Missing},chunk::FunctionChunk,i) =
-    randn(chunk.signal.fn.rng)
+    randn(x.fn.rng)

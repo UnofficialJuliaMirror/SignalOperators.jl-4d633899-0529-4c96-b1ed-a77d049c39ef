@@ -63,37 +63,8 @@ struct AppendChunk{S,C} <: AbstractChunk
     k::Int
 end
 nsamples(x::AppendChunk) = nsamples(x.child)
-@Base.propagate_inbounds sample(x::AppendChunk,i) = sample(x.child,i)
-
-function initchunk(x::AppendSignals)
-    k = 1
-    chunk = initchunk(x.signals[k])
-    K = length(x.signals)
-    while k < K && isnothing(chunk)
-        chunk = initchunk(x.signals[k])
-    end
-    AppendChunk(x.signals[k],chunk,Ref{Any}(nothing),k)
-end
-
-function nextchunklen(x::AppendSignals,chunk::AppendChunk,maxlen,skip)
-    curlen = nextchunklen(chunk.signal,chunk.child,maxlen,skip)
-
-    if curlen > 0
-        chunk.init[] = chunk.k, chunk.child
-        curlen
-    else
-        k = chunk.k
-        K = length(x.signals)
-        nextchild = chunk.child
-        while k < K && curlen == 0
-            k += 1
-            nextchild = initchunk(x.signals[k])
-            curlen = nextchunklen(x.signals[k],nextchild,maxlen,skip)
-        end
-        chunk.init[] = (k,nextchild)
-        curlen
-    end
-end
+@Base.propagate_inbounds sample(::AppendSignals,x::AppendChunk,i) =
+    sample(x.signal,x.child,i)
 
 function nextchunk(x::AppendSignals,maxlen,skip)
     child = nextchunk(x.signals[1],maxlen,skip)
@@ -105,7 +76,6 @@ function nextchunk(x::AppendSignals,maxlen,skip,chunk::AppendChunk)
 end
 
 function advancechild(x::AppendSignals,maxlen,skip,k,childchunk)
-
     K = length(x.signals)
     while k < K && isnothing(childchunk)
         k += 1
@@ -258,7 +228,7 @@ function usepad(x::PaddedSignal,s::IsSignal{T},
     map(x -> convert(T,x),p)
 end
 usepad(x::PaddedSignal,s::IsSignal,::typeof(lastsample),chunk) =
-    sample(chunk,nsamples(chunk))
+    sample(x,chunk,nsamples(chunk))
 function usepad(x::PaddedSignal,s::IsSignal{T},fn::Function,chunk) where T
     nargs = map(x -> x.nargs - 1, methods(fn).ms)
     if 3 ∈ nargs
@@ -300,30 +270,28 @@ child(x::PadChunk) = nothing
 nsamples(x::PadChunk{<:Nothing}) = nsamples(child(x))
 nsamples(x::PadChunk) = x.child_or_len
 
-sample(x::PadChunk{<:Nothing},i) = sample(child(x),i)
-sample(x::PadChunk{<:Function},i) = x.pad(i + x.offset)
-sample(x::PadChunk,i) = x.pad
+sample(x,chunk::PadChunk{<:Nothing},i) = sample(child(x),child(chunk),i)
+sample(x,chunk::PadChunk{<:Function},i) = chunk.pad(i + chunk.offset)
+sample(x,chunk::PadChunk,i) = chunk.pad
 
 function nextchunk(x::PaddedSignal,maxlen,skip)
     chunk = nextchunk(child(x),maxlen,skip)
     if isnothing(chunk)
-        nextchunk(x,maxlen,skip,PadChunk(usepad(x,chunk),0))
+        PadChunk(usepad(x,chunk),maxlen,0)
     else
-        nextchunk(x,maxlen,skip,PadChunk(nothing,chunk,0))
+        PadChunk(nothing,chunk,0)
     end
 end
 
 function nextchunk(x::PaddedSignal,maxlen,skip,chunk::PadChunk{<:Nothing})
-    len = nextchunklen(x,chunk,maxlen,skip)
-    childchunk = nextchunk(child(x),child(chunk),len,skip)
+    childchunk = nextchunk(child(x),maxlen,skip,child(chunk))
     if isnothing(childchunk)
-        PadChunk(usepad(x,chunk),len,nsamples(chunk) + chunk.offset)
+        PadChunk(usepad(x,chunk),maxlen,nsamples(chunk) + chunk.offset)
     else
         PadChunk(nothing,childchunk,nsamples(chunk) + chunk.offset)
     end
 end
-function nextchunk(x::PaddedSignal,chunk::PadChunk,maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+function nextchunk(x::PaddedSignal,len,skip,chunk::PadChunk)
     PadChunk(chunk.pad,len,nsamples(chunk) + chunk.offset)
 end
 

@@ -136,6 +136,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
         data = tone |> tochannels(2) |> sink
         @test size(data,2) == 2
         data2 = signal(data,22Hz) |> tochannels(1) |> sink
+        @test all(data2 .== mean(data,dims=2))
         @test size(data2,2) == 1
 
         @test_throws ErrorException tone |> tochannels(2) |> tochannels(3)

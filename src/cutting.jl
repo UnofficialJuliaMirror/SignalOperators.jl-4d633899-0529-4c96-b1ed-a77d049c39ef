@@ -84,13 +84,13 @@ struct CutChunk{C} <: AbstractChunk
 end
 child(x::CutChunk) = x.child
 
-function initchunk(x::AfterApply)
+function nextchunk(x::AfterApply,maxlen,skip)
     skipped = 0
     len = resolvelen(x)
-    childchunk = initchunk(child(x))
+    childchunk = nextchunk(child(x),maxlen,skip)
     while !isnothing(childchunk) && skipped < len
         skipped += nsamples(childchunk)
-        childchunk = nextchunk(child(x),childchunk,len - skipped,true)
+        childchunk = nextchunk(child(x),len - skipped,true,childchunk)
         isnothing(childchunk) && break
     end
     if skipped < len
@@ -104,17 +104,18 @@ function initchunk(x::AfterApply)
     @assert skipped == len
     CutChunk(0,childchunk)
 end
-function nextchunk(x::AfterApply,maxlen,skip,chunk::CutChunk=skipchunk(x))
-    childchunk = nextchunk(child(x),child(chunk),maxlen,skip)
+function nextchunk(x::AfterApply,maxlen,skip,chunk::CutChunk)
+    childchunk = nextchunk(child(x),maxlen,skip,child(chunk))
     if !isnothing(childchunk)
         CutChunk(0,childchunk)
     end
 end
-nextchunk(x::AfterApply,chunk::CutChunk{Nothing},maxlen,skip) = nothing
+nextchunk(x::AfterApply,maxlen,skip,chunk::CutChunk{Nothing}) = nothing
 
-initchunk(x::UntilApply) = CutChunk(resolvelen(x),initchunk(child(x)))
-function nextchunk(x::UntilApply,len,skip,chunk::CutChunk=nothing)
-    childchunk = !isnothing(chunk) ? nextchunk(child(x),len,skip,child(chunk)) :
+initchunk(x::UntilApply) = CutChunk(resolvelen(x),nothing)
+function nextchunk(x::UntilApply,len,skip,chunk::CutChunk=initchunk(x))
+    childchunk = !isnothing(child(chunk)) ?
+        nextchunk(child(x),len,skip,child(chunk)) :
         nextchunk(child(x),len,skip)
     if !isnothing(childchunk)
         CutChunk(chunk.n - nsamples(chunk),childchunk)
@@ -123,4 +124,5 @@ end
 
 nsamples(x::CutChunk) = nsamples(child(x))
 nsamples(x::CutChunk{Nothing}) = 0
-@Base.propagate_inbounds sample(x::CutChunk,i) = sample(child(x),i)
+@Base.propagate_inbounds sample(x::CutApply,chunk::CutChunk,i) =
+    sample(child(x),child(chunk),i)
