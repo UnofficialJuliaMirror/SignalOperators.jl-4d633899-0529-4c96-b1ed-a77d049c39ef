@@ -319,10 +319,8 @@ function initchunk(x::NormedSignal)
     NormedChunk(0,0,vals)
 end
 
-nextchunklen(x::NormedSignal,chunk,maxlen,skip) =
-    min(maxlen,nsamples(x) - chunk.offset)
-function nextchunk(x::NormedSignal,chunk,maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+function nextchunk(x::NormedSignal,maxlen,skip,chunk)
+    len = min(maxlen,nsamples(x) - chunk.offset)
     NormedChunk(chunk.offset + chunk.len, len, chunk.vals)
 end
 
