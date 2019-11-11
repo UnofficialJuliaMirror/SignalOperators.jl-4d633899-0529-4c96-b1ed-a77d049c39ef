@@ -89,11 +89,9 @@ nsamples(x,chunk::ArrayChunk) = size(chunk.ar,1)
 function nextchunk(x::AxTime,maxlen,skip,chunk::ArrayChunk = ArrayChunk(0,1:0))
     offset = chunk.offset + nsamples(chunk)
     if offset < nsamples(x)
-        len = nextchunklen(x,chunk,maxlen,skip)
+        len = min(maxlen,nsamples(x)-chunk.offset)
         indices = offset .+ (1:len)
         array_chunk_helper(x,offset,indices)
-    else
-        nothing
     end
 end
 array_chunk_helper(x::AxTimeD1,offset,indices) =
