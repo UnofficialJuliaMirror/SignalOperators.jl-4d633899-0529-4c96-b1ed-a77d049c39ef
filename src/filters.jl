@@ -233,16 +233,14 @@ outputlength(x,n) = n
 inputlength(x::DSP.Filters.Filter,n) = DSP.inputlength(x,n)
 outputlength(x::DSP.Filters.Filter,n) = DSP.outputlength(x,n)
 
-initchunk(x::FilteredSignal) = FilterChunk(0,0,FilterState(x))
+function nextchunk(x::FilteredSignal,maxlen,skip,
+    chunk=FilterChunk(0,0,FilterState(x)))
 
-function nextchunklen(x::FilteredSignal,chunk,maxlen,skip)
-
-    min(chunk.state.last_output_offset - chunk.n,maxlen)
-function nextchunk(x::FilteredSignal,chunk,maxlen,skip)
     len = min(maxlen,x.blocksize)
     n = chunk.n + chunk.len
     state = prepare_state!(x,chunk.state,n+len)
 
+    # TODO: we need an additional offset if the output does not advance (right?)
     state.last_output_offset ≥ n+len ? FilterChunk(n,len,state) : nothing
 end
 
@@ -283,7 +281,7 @@ function prepare_state!(x,state,index)
     state
 end
 
-@Base.propagate_inbounds function sample(x::FilterChunk,i)
+@Base.propagate_inbounds function sample(::FilteredSignal,x::FilterChunk,i)
     index = i-x.state.first_output_offset
     view(x.state.output,index,:)
 end
