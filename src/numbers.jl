@@ -34,12 +34,9 @@ samplerate(x::NumberSignal) = x.samplerate
 tosamplerate(x::NumberSignal{<:Any,<:Any,DB},::IsSignal,::ComputedSignal,
     fs=missing;blocksize) where DB = NumberSignal(x.val,fs,dB=DB)
 
-struct NumberChunk{T}
-    val::T
+struct NumberChunk
     len::Int
 end
-initchunk(x::NumberSignal) = NumberChunk(x.val,0)
-nextchunk(x::NumberSignal,chunk,maxlen,skip) = NumberChunk(x.val,maxlen)
-nextchunklen(x::NumberSignal,chunk,maxlen,skip) = min(maxlen,inflen)
-nsamples(chunk::NumberChunk) = chunk.len
-sample(chunk::NumberChunk,i) = chunk.val
+nextchunk(x::NumberSignal,len,skip,chunk=nothing) = NumberChunk(len)
+nsamples(x,chunk::NumberChunk) = chunk.len
+sample(x,chunk::NumberChunk,i) = x.val

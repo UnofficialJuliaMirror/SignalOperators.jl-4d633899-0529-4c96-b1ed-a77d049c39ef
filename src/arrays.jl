@@ -83,16 +83,10 @@ struct ArrayChunk{A} <: AbstractChunk
     offset::Int
     ar::A
 end
-nsamples(x::ArrayChunk) = size(x.ar,1)
-sample(x::ArrayChunk,i) = view(x.ar,i,:)
+nsamples(x,chunk::ArrayChunk) = size(chunk.ar,1)
+@Base.propagate_inbounds sample(x,chunk::ArrayChunk,i) = view(chunk.ar,i)
 
-nextchunklen(x::AxTime,chunk::ArrayChunk,maxlen,skip) =
-    min(maxlen,size(x,timedim(x)) - chunk.offset)
-timedim(x::AxTimeD1) = 1
-timedim(x::AxTimeD2) = 2
-
-initchunk(x::AxTime) = ArrayChunk(0,1:0)
-function nextchunk(x::AxTime,chunk::ArrayChunk,maxlen,skip)
+function nextchunk(x::AxTime,maxlen,skip,chunk::ArrayChunk = ArrayChunk(0,1:0))
     offset = chunk.offset + nsamples(chunk)
     if offset < nsamples(x)
         len = nextchunklen(x,chunk,maxlen,skip)

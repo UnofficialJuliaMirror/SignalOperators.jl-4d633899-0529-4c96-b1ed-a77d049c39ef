@@ -41,34 +41,19 @@ function Base.show(io::IO, ::MIME"text/plain",x::SignalFunction)
     end
 end
 
-struct FunctionChunk{T}
-    signal::T
+struct FunctionChunk
     len::Int
 end
-initchunk(x::SignalFunction) = FunctionChunk(x,0)
-nextchunk(x::SignalFunction,chunk,maxlen,skip) = FunctionChunk(x,maxlen)
-nextchunklen(x::SignalFunction,chunk,maxlen,skip) = min(maxlen,inflen)
-nsamples(chunk::FunctionChunk) = chunk.len
+nextchunk(x::SignalFunction,maxlen,skip,chunk=nothing) = FunctionChunk(maxlen)
+nsamples(x,chunk::FunctionChunk) = chunk.len
 
-function sample(chunk::FunctionChunk,i)
-    x = chunk.signal
-    x.fn(2π*((i/x.samplerate*x.ω + x.ϕ) % 1.0))
-end
-
-function sample(chunk::FunctionChunk{<:SignalFunction{<:Any,Missing}},i)
-    x = chunk.signal
+sample(x,chunk::FunctionChunk,i) = x.fn(2π*((i/x.samplerate*x.ω + x.ϕ) % 1.0))
+sample(x,chunk::FunctionChunk{<:SignalFunction{<:Any,Missing}},i) =
     x.fn(i/x.samplerate + x.ϕ)
-end
-
-function sample(chunk::FunctionChunk{<:SignalFunction{typeof(sin)}},i)
-    x = chunk.signal
+sample(x,chunk::FunctionChunk{<:SignalFunction{typeof(sin)}},i) =
     sinpi(2*(i/x.samplerate*x.ω + x.ϕ))
-end
-
-function sample(chunk::FunctionChunk{<:SignalFunction{typeof(sin),Missing}},i)
-    x = chunk.signal
+sample(x,chunk::FunctionChunk{<:SignalFunction{typeof(sin),Missing}},i) =
     sinpi(2*(i/x.samplerate + x.ϕ))
-end
 
 tosamplerate(x::SignalFunction,::IsSignal,::ComputedSignal,fs;blocksize) =
     SignalFunction(x.fn,x.first,x.ω,x.ϕ,coalesce(inHz(Float64,fs),x.samplerate))

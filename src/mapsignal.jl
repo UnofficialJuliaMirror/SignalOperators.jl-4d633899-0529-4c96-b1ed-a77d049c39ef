@@ -140,12 +140,11 @@ testvalue(x) = Tuple(zero(channel_eltype(x)) for _ in 1:nchannels(x))
 
 const MAX_CHANNEL_STACK = 64
 
-struct MapSignalChunk{N,CN,Fn,Ch,C,S}
-    fn::Fn
+struct MapSignalChunk{Ch,C,O}
     len::Int
     channels::Ch
     chunks::C
-    signals::S
+    offsets::O
 end
 nsamples(x::MapSignalChunk) = x.len
 
@@ -156,61 +155,71 @@ function prepare_channels(x::MapSignal)
         nothing
 end
 
-function initchunk(x::MapSignal{Fn,N,CN}) where {Fn,N,CN}
-    channels = prepare_channels(x)
-    chunks = initchunk.(x.padded_signals)
-    Ch,C,S = typeof(channels),typeof(chunks),typeof(x.padded_signals)
-    MapSignalChunk{N,CN,Fn,Ch,C,S}(x.fn,0,channels,chunks,x.padded_signals)
+function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,chunk=nothing) where {Fn,N,CN}
+    channels = !isnothing(chunk) ? chunk.channels : prepare_channels(x)
+
+    offsets = map(@λ(_ + nsamples(chunk)),chunk.offsets)
+    chunks = map(chunk.chunks,offsets) do childchunk, offset
+        if offset == nsamples(childchunk)
+            nextchunk(x,maxlen,skip,childchunk)
+        else
+            childchunk
+        end
+    end
+    # reset any used chunk offsets back to 0
+    offsets = map(@λ(_1 == nsamples(_2) ? 0 : _1), offsets, chunk.chunks)
+
+    # find the smallest chiold chunk length, and use that as the length for the
+    # parent chunk
+    len = minimum(nsamples.(chunks) .- offsets)
+
+    Ch,C,O = typeof(channels), typeof(chunks), offsets,
+        typeof(x.padded_signals)
+    MapSignalChunk{Ch,C,O}(len,channels,chunks)
 end
 
-nextchunklen(x::MapSignal,chunk::MapSignalChunk,maxlen,skip) =
-    minimum(nextchunklen.(x.padded_signals,chunk.chunks,maxlen,skip))
-nextchunklen(x::MapSignal,inits::Tuple,maxlen,skip) =
-    minimum(nextchunklen.(x.padded_signals,inits,maxlen,skip))
-
-function nextchunk(x::MapSignal{Fn,N,CN},chunk,maxlen,skip) where {Fn,N,CN}
-    maxlen = nextchunklen(x,chunk,maxlen,skip)
-    channels = chunk.channels
-    chunks = nextchunk.(x.padded_signals,chunk.chunks,maxlen,skip)
-    Ch,C,S = typeof(channels),typeof(chunks),typeof(x.padded_signals)
-    MapSignalChunk{N,CN,Fn,Ch,C,S}(x.fn,maxlen,channels,chunks,x.padded_signals)
-end
-
-map_sample_helper(::Int,::Tuple,::Tuple,::Val{0}) = ()
-function map_sample_helper(i::Int,
+map_sample_helper(::Tuple,::Tuple,::Tuple,::Val{0}) = ()
+function map_sample_helper(
+    ii::Tuple,
     children::Tuple,
     chunks::Tuple,
     ::Val{N}) where N
 
-    (map_sample_helper(i,children,chunks,Val{N-1}())..., sample(chunks[N],i))
+    (map_sample_helper(ii[N],children,chunks,Val{N-1}())...,
+        sample(children[N],chunks[N],ii[N]))
 end
 
 trange(::Val{N}) where N = (trange(Val(N-1))...,N)
 trange(::Val{1}) = (1,)
 
-@Base.propagate_inbounds function sample(
-    x::MapSignalChunk{N,CN,<:FnBr,<:Nothing},
+@Base.propagate_inbounds function sample(x::MapSignal{<:FnBr,N,CN},
+    chunk::MapSignalChunk{<:Nothing},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i,x.signals,x.chunks,Val{N}())
+    inputs = map_sample_helper(i .+ chunk.offsets,
+        x.padded_signals,chunk.chunks,Val{N}())
 
     map(ch -> x.fn(map(@λ(_[ch]),inputs)...),trange(Val{CN}()))
 end
 
 @Base.propagate_inbounds function sample(
-    x::MapSignalChunk{N,CN,<:FnBr,<:Array},
+    x::MapSignal{<:FnBr,N,CN},
+    chunk::MapSignalChunk{<:Array},
     i::Int) where {N,CN}
 
-    inputs = map_sample_helper(i,x.signals,x.chunks,Val{N}())
+    inputs = map_sample_helper(i .+ chunk.ofsets,x.padded_signals,
+        chunk.chunks,Val{N}())
 
-    map!(ch -> x.fn(map(@λ(_[ch]),inputs)...),x.channels,1:CN)
+    map!(ch -> x.fn(map(@λ(_[ch]),inputs)...),chunk.channels,1:CN)
 end
 
 @Base.propagate_inbounds function sample(
-    x::MapSignalChunk{N,CN,<:Any,<:Nothing},
+    x::MapSignal{<:Any,N,CN}
+    chunk::MapSignalChunk{<:Nothing},
     i::Int) where {N,CN}
 
-    x.fn(map_sample_helper(i,x.signals,x.chunks,Val{N}())...)
+    x.fn(map_sample_helper(i .+ chunk.offsets,x.padded_signals,
+        chunk.chunks,Val{N}())...)
 end
 
 default_pad(x) = zero

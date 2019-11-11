@@ -88,30 +88,29 @@ end
 abstract type AbstractChunk; end
 function sample
 end
-function nextchunklen
-end
 function nextchunk
 end
 
 fold(x) = zip(x,Iterators.drop(x,1))
 sink!(result,x,sig::IsSignal) =
-    sink!(result,x,sig,nextchunk(x,initchunk(x),size(result,1),false))
+    sink!(result,x,sig,nextchunk(x,size(result,1),false))
 willskip(x) = false
 function sink!(result,x,::IsSignal,chunk)
     written = 0
     while !isnothing(chunk) && written < size(result,1)
         @assert nsamples(chunk) > 0
-        sink_helper!(result,written,chunk)
+        sink_helper!(result,written,x,chunk)
         written += nsamples(chunk)
-        chunk = nextchunk(x,chunk,size(result,1)-written,willskip(result))
+        maxlen = size(result,1)-written
+        chunk = nextchunk(x,maxlen,willskip(result),chunk)
     end
     @assert written == size(result,1)
     result
 end
 
-@noinline function sink_helper!(result,written,chunk)
+@noinline function sink_helper!(result,written,x,chunk)
     @inbounds @simd for i in 1:nsamples(chunk)
-        writesink!(result,i+written,sample(chunk,i))
+        writesink!(result,i+written,sample(x,chunk,i))
     end
 end
 
