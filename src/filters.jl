@@ -149,24 +149,10 @@ filterstring(::Type{<:Bandpass}) = "bandpass"
 filterstring(::Type{<:Bandstop}) = "bandstop"
 filterstring(x) = string(x)
 
-mutable struct FilterState{H,Fs,S,T}
+struct FilterState{H,S,T}
     hs::Vector{H}
-    samplerate::Fs
-    last_input_offset::Int
-    first_output_offset::Int
-    last_output_offset::Int
-    lastoutput::Int
-
     input::Matrix{S}
     output::Matrix{T}
-    function FilterState(hs::Vector{H},fs::Fs,last_input_offset::Int,
-        first_output_offset::Int,last_output_offset::Int,lastoutput::Int,
-        input::Matrix{S},
-        output::Matrix{T}) where {H,Fs,S,T}
-
-        new{H,Fs,S,T}(hs,fs,last_input_offset,first_output_offset,
-            last_output_offset,lastoutput,input,output)
-    end
 end
 init_length(x::FilteredSignal) = x.blocksize
 init_length(x::FilteredSignal{<:Any,<:Any,<:ResamplerFn}) =
@@ -176,13 +162,8 @@ function FilterState(x::FilteredSignal)
     len = init_length(x)
     input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
     output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
-    last_input_offset = 0
-    first_output_offset = 0
-    last_output_offset = 0
-    lastoutput = 0
 
-    FilterState(hs,float(samplerate(x)),last_input_offset,first_output_offset,
-        last_output_offset,lastoutput,input,output)
+    FilterState(hs,input,output)
 end
 
 function tosamplerate(x::FilteredSignal,s::IsSignal{<:Any,<:Number},::ComputedSignal,fs;
@@ -214,6 +195,10 @@ end
 struct FilterChunk{St} <: AbstractChunk
     n::Int
     len::Int
+    last_input_offset::Int
+    first_output_offset::Int
+    last_output_offset::Int
+    lastoutput::Int
     state::St
 end
 nsamples(x::FilterChunk) = x.len
@@ -238,33 +223,32 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
 
     len = min(maxlen,x.blocksize)
     n = chunk.n + chunk.len
-    state = prepare_state!(x,chunk.state,n+len)
+    index = n+len
 
-    # TODO: we need an additional offset if the output does not advance (right?)
-    state.last_output_offset ≥ n+len ? FilterChunk(n,len,state) : nothing
-end
-
-function prepare_state!(x,state,index)
-    if state.last_output_offset+1 ≤ index
+    state = chunk.state
+    first_output_offset = chunk.first_output_offset
+    last_output_offset = chunk.last_output_offset
+    last_input_offset = chunk.last_input_offset
+    if chunk.last_output_offset+1 ≤ index
         # drop any samples that we do not wish to generate output for
-        if state.last_output_offset+1 < index
-            recurse_len = index - (state.last_output_offset + 1)
-            recusre_chunk = FilterChunk(0,state.last_output_offset,state)
+        if chunk.last_output_offset+1 < index
+            recurse_len = index - (chunk.last_output_offset + 1)
+            recusre_chunk = FilterChunk(0,chunk.last_output_offset,state)
             sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
                   nextchunk(x,recusre_chunk,recurse_len,true))
         end
         @assert state.last_output_offset+1 ≥ index
 
-        if state.last_output_offset+1 == index
-            state.first_output_offset = state.last_output_offset
+        if last_output_offset+1 == index
+            first_output_offset = last_output_offset
+
             # write child samples to input buffer
             # @show x.blocksize
             # @show nsamples(x)-state.last_input_offset
 
             psig = pad(x.signal,zero)
-            sink!(state.input,psig,SignalTrait(psig),
-                state.last_input_offset)
-            state.last_input_offset += size(state.input,1)
+            sink!(state.input,psig,SignalTrait(psig),last_input_offset)
+            last_input_offset += size(state.input,1)
 
             # filter the input to the output buffer
             out_len = outputlength(state.hs[1],size(state.input,1))
@@ -272,17 +256,20 @@ function prepare_state!(x,state,index)
                 filt!(view(state.output,1:out_len,ch),state.hs[ch],
                         view(state.input,:,ch))
             end
-            state.last_output_offset += out_len
+            last_output_offset += out_len
         end
     end
-    @assert state.last_output_offset ≥ index ||
-        state.last_output_offset == nsamples(x)
+    @assert last_output_offset ≥ index || last_output_offset == nsamples(x)
 
-    state
+    # TODO: check order of arguments (lastoutput == index... I think? double
+    # check that's right)
+
+    state.last_output_offset ≥ n+len ? FilterChunk(n,len,index,last_input_offset,
+        first_output_offset,last_output_offset,state) : nothing
 end
 
 @Base.propagate_inbounds function sample(::FilteredSignal,x::FilterChunk,i)
-    index = i-x.state.first_output_offset
+    index = i+x.lastoutput-x.first_output_offset
     view(x.state.output,index,:)
 end
 
