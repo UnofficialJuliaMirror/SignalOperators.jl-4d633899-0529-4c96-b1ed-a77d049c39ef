@@ -40,49 +40,41 @@ function tosamplerate(
     RampSignal(D,tosamplerate(child(x),fs;blocksize=blocksize),x.time,x.fn)
 end
 
-struct RampChunk{D,T,R} <: AbstractChunk
-    rampfn::R
+struct RampChunk{Fn,T} <: AbstractChunk
+    ramp::Fn
     marker::Int
     stop::Int
     offset::Int
     len::Int
-    ch::Int
 end
+RampChunk(x,fn,marker,stop,offset,len) =
+    RampChunk{typeof(fn),float(channel_eltype(x))}(fn,marker,stop,offset,len)
 nsamples(x::RampChunk) = x.len
-function RampChunk{D}(x,fn,marker,stop,offset,len) where D
-    T,Fn = float(channel_eltype(x)),typeof(fn)
-    RampChunk{D,T,Fn}(fn,marker,stop,offset,len,nchannels(x))
-end
 
-sample(x::RampChunk{<:Any,T,Nothing},i) where T = Fill(one(T),x.ch)
-function sample(x::RampChunk{:on},i)
-    ramplen = x.marker
-    rampval = x.rampfn((i-1) / ramplen)
-    Fill(rampval,x.ch)
+sample(x::RampSignal,chunk::RampChunk{Nothing,T},i) where T =
+    Fill(one(T),nchannels(x))
+function sample(x::RampSignal{:on},chunk::RampChunk,i)
+    ramplen = chunk.marker
+    rampval = chunk.ramp((i-1) / ramplen)
+    Fill(rampval,nchannels(x))
 end
-function sample(x::RampChunk{:off},i)
-    startramp = x.marker
-    rampval = x.stop > startramp ?
-        rampval = x.rampfn(1-(i - startramp)/(x.stop - startramp)) :
-        rampval = x.rampfn(1)
-    Fill(rampval,x.ch)
+function sample(x::RampSignal{:off},chunk::RampChunk,i)
+    startramp = chunk.marker
+    rampval = chunk.stop > startramp ?
+        rampval = chunk.ramp(1-(i - startramp)/(chunk.stop - startramp)) :
+        rampval = chunk.ramp(1)
+    Fill(rampval,nchannels(x))
 end
 
 initchunk(x::RampSignal{:on}) =
     RampChunk{:on}(x,x.fn,resolvelen(x),nsamples(x),0,0)
 initchunk(x::RampSignal{:off}) =
-    RampChunk{:off}(x,nothing,nsamples(x) - resolvelen(x),nsamples(x),0)
-nextchunklen(x::RampSignal{:on},chunk::RampChunk,maxlen,skip) =
-    min(maxlen,chunk.marker - chunk.offset)
-nextchunklen(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip) =
-    min(maxlen,chunk.stop - chunk.offset)
-nextchunklen(x::RampSignal{:off},chunk::RampChunk,maxlen,skip) =
-    min(maxlen,chunk.marker - chunk.offset)
-nextchunklen(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip) =
-    min(maxlen,chunk.stop - chunk.offset)
+    RampChunk{:off}(x,x.fn,nsamples(x) - resolvelen(x),nsamples(x),0,0)
 
-function nextchunk(x::RampSignal{:on},chunk::RampChunk,maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+nextchunk(x::RampSignal,maxlen,skip,chunk) =
+    nextchunk(x,maxlen,skip,initchunk(x))
+function nextchunk(x::RampSignal{:on},maxlen,skip,chunk::RampChunk)
+    len = min(maxlen,chunk.marker - chunk.offset)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk{:on}(x,x.fn,chunk.marker,chunk.stop,offset,len)
@@ -91,14 +83,14 @@ function nextchunk(x::RampSignal{:on},chunk::RampChunk,maxlen,skip)
     end
 end
 
-function nextchunk(x::RampSignal{:on},chunk::RampChunk{Nothing},maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+function nextchunk(x::RampSignal{:on},maxlen,skip,chunk::RampChunk{Nothing})
+    len = min(maxlen,chunk.stop - chunk.offset)
     offset = chunk.offset + chunk.len
     RampChunk{:on}(x,nothing,chunk.marker,chunk.stop,offset,len)
 end
 
-function nextchunk(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+function nextchunk(x::RampSignal{:off},maxlen,skip,chunk::RampChunk{Nothing})
+    len = min(maxlen,chunk.marker - chunk.offset)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk{:off}(x,nothing,chunk.marker,chunk.stop,offset,len)
@@ -107,8 +99,8 @@ function nextchunk(x::RampSignal{:off},chunk::RampChunk{Nothing},maxlen,skip)
     end
 end
 
-function nextchunk(x::RampSignal{:off},chunk::RampChunk,maxlen,skip)
-    len = nextchunklen(x,chunk,maxlen,skip)
+function nextchunk(x::RampSignal{:off},maxlen,skip,chunk::RampChunk)
+    len = min(maxlen,chunk.stop - chunk.offset)
     offset = chunk.offset + chunk.len
     RampChunk{:off}(x,x.fn,chunk.marker,chunk.stop,offset,len)
 end
