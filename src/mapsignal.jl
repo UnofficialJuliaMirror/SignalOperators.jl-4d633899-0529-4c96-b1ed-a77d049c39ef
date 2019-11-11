@@ -214,7 +214,7 @@ end
 end
 
 @Base.propagate_inbounds function sample(
-    x::MapSignal{<:Any,N,CN}
+    x::MapSignal{<:Any,N,CN},
     chunk::MapSignalChunk{<:Nothing},
     i::Int) where {N,CN}
 
