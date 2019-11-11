@@ -96,13 +96,14 @@ end
 fold(x) = zip(x,Iterators.drop(x,1))
 sink!(result,x,sig::IsSignal) =
     sink!(result,x,sig,nextchunk(x,initchunk(x),size(result,1),false))
+willskip(x) = false
 function sink!(result,x,::IsSignal,chunk)
     written = 0
     while !isnothing(chunk) && written < size(result,1)
         @assert nsamples(chunk) > 0
         sink_helper!(result,written,chunk)
         written += nsamples(chunk)
-        chunk = nextchunk(x,chunk,size(result,1)-written,false)
+        chunk = nextchunk(x,chunk,size(result,1)-written,willskip(result))
     end
     @assert written == size(result,1)
     result

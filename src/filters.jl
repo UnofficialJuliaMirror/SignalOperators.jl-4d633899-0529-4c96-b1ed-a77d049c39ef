@@ -226,18 +226,17 @@ Base.size(x::NullBuffer) = (x.len,x.ch)
 Base.size(x::NullBuffer,n) = (x.len,x.ch)[n]
 writesink!(x::NullBuffer,i,y) = y
 Base.view(x::NullBuffer,i,j) = x
+willskip(::NullBuffer) = true
 
 inputlength(x,n) = n
 outputlength(x,n) = n
 inputlength(x::DSP.Filters.Filter,n) = DSP.inputlength(x,n)
 outputlength(x::DSP.Filters.Filter,n) = DSP.outputlength(x,n)
 
-function initchunk(x::FilteredSignal)
-    state = prepare_state!(x,FilterState(x),0)
-    FilterChunk(0,0,state)
-end
+initchunk(x::FilteredSignal) = FilterChunk(0,0,FilterState(x))
 
-nextchunklen(x::FilteredSignal,chunk,maxlen,skip) =
+function nextchunklen(x::FilteredSignal,chunk,maxlen,skip)
+
     min(chunk.state.last_output_offset - chunk.n,maxlen)
 function nextchunk(x::FilteredSignal,chunk,maxlen,skip)
     len = min(maxlen,x.blocksize)
@@ -250,11 +249,11 @@ end
 function prepare_state!(x,state,index)
     if state.last_output_offset+1 ≤ index
         # drop any samples that we do not wish to generate output for
-        # TODO: need to figure out chunk length here
         if state.last_output_offset+1 < index
             recurse_len = index - (state.last_output_offset + 1)
+            recusre_chunk = FilterChunk(0,state.last_output_offset,state)
             sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
-                  nextchunk(x,FilterChunk(state.last_output_offset,state)))
+                  nextchunk(x,recusre_chunk,recurse_len,true))
         end
         @assert state.last_output_offset+1 ≥ index
 
