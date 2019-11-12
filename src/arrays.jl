@@ -84,7 +84,7 @@ struct ArrayChunk{A} <: AbstractChunk
     ar::A
 end
 nsamples(chunk::ArrayChunk) = size(chunk.ar,1)
-@Base.propagate_inbounds sample(x,chunk::ArrayChunk,i) = view(chunk.ar,i)
+@Base.propagate_inbounds sample(x,chunk::ArrayChunk,i) = view(chunk.ar,i,:)
 
 function nextchunk(x::AxTime,maxlen,skip,chunk::ArrayChunk = ArrayChunk(0,1:0))
     offset = chunk.offset + nsamples(chunk)
@@ -97,7 +97,7 @@ end
 array_chunk_helper(x::AxTimeD1,offset,indices) =
     ArrayChunk(offset, view(x,indices,:))
 array_chunk_helper(x::AxTimeD2,offset,indices) =
-    ArrayChunk(offset, view(x,:,indices))
+    ArrayChunk(offset, PermuateDimsArray(view(x,:,indices),(2,1)))
 
 function signaltile(x)
     io = IOBuffer()
