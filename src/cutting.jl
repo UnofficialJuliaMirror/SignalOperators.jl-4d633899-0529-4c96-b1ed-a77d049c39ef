@@ -87,10 +87,11 @@ child(x::CutChunk) = x.child
 function nextchunk(x::AfterApply,maxlen,skip)
     skipped = 0
     len = resolvelen(x)
-    childchunk = nextchunk(child(x),maxlen,skip)
+    childchunk = nextchunk(child(x),len,skip)
     while !isnothing(childchunk) && skipped < len
         skipped += nsamples(childchunk)
-        childchunk = nextchunk(child(x),len - skipped,true,childchunk)
+        childchunk = nextchunk(child(x),min(maxlen,len - skipped),true,
+            childchunk)
         isnothing(childchunk) && break
     end
     if skipped < len
@@ -102,7 +103,7 @@ function nextchunk(x::AfterApply,maxlen,skip)
             sig_string)
     end
     @assert skipped == len
-    CutChunk(0,childchunk)
+    nextchunk(x,maxlen,skip,CutChunk(0,childchunk))
 end
 function nextchunk(x::AfterApply,maxlen,skip,chunk::CutChunk)
     childchunk = nextchunk(child(x),maxlen,skip,child(chunk))
@@ -114,11 +115,14 @@ nextchunk(x::AfterApply,maxlen,skip,chunk::CutChunk{Nothing}) = nothing
 
 initchunk(x::UntilApply) = CutChunk(resolvelen(x),nothing)
 function nextchunk(x::UntilApply,len,skip,chunk::CutChunk=initchunk(x))
-    childchunk = !isnothing(child(chunk)) ?
-        nextchunk(child(x),len,skip,child(chunk)) :
-        nextchunk(child(x),len,skip)
-    if !isnothing(childchunk)
-        CutChunk(chunk.n - nsamples(chunk),childchunk)
+    nextlen = chunk.n - nsamples(chunk)
+    if nextlen > 0
+        childchunk = !isnothing(child(chunk)) ?
+            nextchunk(child(x),min(nextlen,len),skip,child(chunk)) :
+            nextchunk(child(x),min(nextlen,len),skip)
+        if !isnothing(childchunk)
+            CutChunk(nextlen,childchunk)
+        end
     end
 end
 
