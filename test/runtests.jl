@@ -215,6 +215,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
             tones = a |> append(b)
             @test duration(tones) == 10
             @test nsamples(sink(tones)) == 220
+            @test all(sink(tones) .== vcat(sink(a),sink(b)))
 
             fs = 3
             a = signal(2,fs) |> tochannels(nch) |> until(2s) |>
