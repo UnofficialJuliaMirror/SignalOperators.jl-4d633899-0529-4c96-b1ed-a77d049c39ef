@@ -192,13 +192,17 @@ child(x::FilterChunk) = x.child
 init_length(x::FilteredSignal) = min(nsamples(x),x.blocksize)
 init_length(x::FilteredSignal{<:Any,<:Any,<:ResamplerFn}) =
     trunc(Int,min(nsamples(x),x.blocksize) / x.fn.ratio)
+
+struct UndefChild
+end
+const undef_child = UndefChild()
 function FilterChunk(x::FilteredSignal)
     hs = [resolve_filter(x.fn(samplerate(x))) for _ in 1:nchannels(x.signal)]
     len = init_length(x)
     input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
     output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
 
-    FilterChunk(0,size(output,1), 0,0, hs,input,output,nothing)
+    FilterChunk(0,size(output,1), 0,0, hs,input,output,undef_child)
 end
 nsamples(x::FilterChunk) = x.len
 @Base.propagate_inbounds sample(::FilteredSignal,x::FilterChunk,i) =
@@ -225,10 +229,11 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
     elseif nsamples(child(x)) - chunk.last_input_offset == 0
         nothing
     else
+        @assert !isnothing(child(chunk))
         len = min(maxlen,size(chunk.output,1))
 
         psig = pad(x.signal,zero)
-        childchunk = !isnothing(child(chunk)) ? child(chunk) :
+        childchunk = !isa(child(chunk), UndefChild) ? child(chunk) :
             nextchunk(psig,size(chunk.input,1),false)
         childchunk = sink!(chunk.input,psig,SignalTrait(psig),childchunk)
         last_input_offset = chunk.last_input_offset + size(chunk.input,1)
