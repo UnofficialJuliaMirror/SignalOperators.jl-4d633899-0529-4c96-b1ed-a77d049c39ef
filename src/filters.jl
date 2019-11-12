@@ -180,7 +180,6 @@ struct FilterChunk{H,S,T,C}
     last_output_index::Int
 
     last_input_offset::Int
-    first_output_offset::Int
     last_output_offset::Int
 
     hs::Vector{H}
@@ -198,7 +197,7 @@ function FilterChunk(x::FilteredSignal)
     input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
     output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
 
-    FilterChunk(0,size(output,1), 0,0,0, hs,input,output,nothing)
+    FilterChunk(0,size(output,1), 0,0, hs,input,output,nothing)
 end
 nsamples(x::FilterChunk) = x.len
 @Base.propagate_inbounds sample(::FilteredSignal,x::FilterChunk,i) =
@@ -214,11 +213,11 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
 
     last_output_index = chunk.last_output_index + chunk.len
 
-    if last_output_index < size(chunk,1)
+    if last_output_index < size(chunk.output,1)
         len = min(maxlen, size(chunk.output) - last_output_index)
         FilterChunk(len, last_output_index, chunk.last_input_offset,
-            chunk.first_output_offset, chunk.last_output_offset,
-            chunk.hs, chunk.input, chunk.output, chunk.child)
+            chunk.last_output_offset, chunk.hs, chunk.input, chunk.output,
+            chunk.child)
     else
         len = min(maxlen,size(chunk.output,1))
 
@@ -235,12 +234,10 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
                     view(chunk.input,:,ch))
         end
         last_output_offset = chunk.last_output_offset + out_len
-        first_output_offset = chunk.last_output_offset
         last_output_index = 0
 
         FilterChunk(len, last_output_index, last_input_offset,
-            first_output_offset, last_output_offset,
-            chunk.hs, chunk.input, chunk.output, childchunk)
+            last_output_offset, chunk.hs, chunk.input, chunk.output, childchunk)
     end
 end
 
