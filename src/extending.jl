@@ -59,20 +59,20 @@ tosamplerate(x::AppendSignals,s::IsSignal{<:Any,Missing},__ignore__,fs;
 struct AppendChunk{S,C} <: AbstractChunk
     signal::S
     child::C
-    init::Ref{Any}
     k::Int
 end
+child(x::AppendChunk) = x.child
 nsamples(x::AppendChunk) = nsamples(x.child)
 @Base.propagate_inbounds sample(::AppendSignals,x::AppendChunk,i) =
     sample(x.signal,x.child,i)
 
 function nextchunk(x::AppendSignals,maxlen,skip)
     child = nextchunk(x.signals[1],maxlen,skip)
-    advancechild(x,maxlen,skip,k,child)
+    advancechild(x,maxlen,skip,1,child)
 end
 function nextchunk(x::AppendSignals,maxlen,skip,chunk::AppendChunk)
-    childchunk = nextchunk(x.signals[chunk.k],maxlen,skip,chunk.k,child(chunk))
-    advancechild(x,maxlen,skip,childchunk)
+    childchunk = nextchunk(x.signals[chunk.k],maxlen,skip,child(chunk))
+    advancechild(x,maxlen,skip,chunk.k,childchunk)
 end
 
 function advancechild(x::AppendSignals,maxlen,skip,k,childchunk)
