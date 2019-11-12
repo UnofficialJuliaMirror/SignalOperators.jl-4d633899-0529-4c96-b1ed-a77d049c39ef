@@ -188,6 +188,7 @@ struct FilterChunk{H,S,T,C}
 
     child::C
 end
+child(x::FilterChunk) = x.child
 init_length(x::FilteredSignal) = min(nsamples(x),x.blocksize)
 init_length(x::FilteredSignal{<:Any,<:Any,<:ResamplerFn}) =
     trunc(Int,min(nsamples(x),x.blocksize) / x.fn.ratio)
@@ -201,7 +202,7 @@ function FilterChunk(x::FilteredSignal)
 end
 nsamples(x::FilterChunk) = x.len
 @Base.propagate_inbounds sample(::FilteredSignal,x::FilterChunk,i) =
-    view(x.state.output,i+x.last_output_index,:)
+    view(x.output,i+x.last_output_index,:)
 
 inputlength(x,n) = n
 outputlength(x,n) = n
@@ -213,11 +214,16 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
 
     last_output_index = chunk.last_output_index + chunk.len
 
+    # check for leftover samples in the old output buffer
     if last_output_index < size(chunk.output,1)
-        len = min(maxlen, size(chunk.output) - last_output_index)
+        len = min(maxlen, size(chunk.output,1) - last_output_index)
+
         FilterChunk(len, last_output_index, chunk.last_input_offset,
             chunk.last_output_offset, chunk.hs, chunk.input, chunk.output,
             chunk.child)
+    # check for the end of the child signal
+    elseif nsamples(child(x)) - chunk.last_input_offset == 0
+        nothing
     else
         len = min(maxlen,size(chunk.output,1))
 
