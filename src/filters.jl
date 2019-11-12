@@ -149,23 +149,6 @@ filterstring(::Type{<:Bandpass}) = "bandpass"
 filterstring(::Type{<:Bandstop}) = "bandstop"
 filterstring(x) = string(x)
 
-struct FilterState{H,S,T}
-    hs::Vector{H}
-    input::Matrix{S}
-    output::Matrix{T}
-end
-init_length(x::FilteredSignal) = x.blocksize
-init_length(x::FilteredSignal{<:Any,<:Any,<:ResamplerFn}) =
-    trunc(Int,x.blocksize / x.fn.ratio)
-function FilterState(x::FilteredSignal)
-    hs = [resolve_filter(x.fn(samplerate(x))) for _ in 1:nchannels(x.signal)]
-    len = init_length(x)
-    input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
-    output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
-
-    FilterState(hs,input,output)
-end
-
 function tosamplerate(x::FilteredSignal,s::IsSignal{<:Any,<:Number},::ComputedSignal,fs;
 blocksize)
     # is this a non-resampling filter?
@@ -192,26 +175,34 @@ function nsamples(x::FilteredSignal)
     end
 end
 
-struct FilterChunk{St} <: AbstractChunk
-    n::Int
+struct FilterChunk{H,S,T,C}
     len::Int
+    last_output_index::Int
+
     last_input_offset::Int
     first_output_offset::Int
     last_output_offset::Int
-    lastoutput::Int
-    state::St
+
+    hs::Vector{H}
+    input::Matrix{S}
+    output::Matrix{T}
+
+    child::C
+end
+init_length(x::FilteredSignal) = min(nsamples(x),x.blocksize)
+init_length(x::FilteredSignal{<:Any,<:Any,<:ResamplerFn}) =
+    trunc(Int,min(nsamples(x),x.blocksize) / x.fn.ratio)
+function FilterChunk(x::FilteredSignal)
+    hs = [resolve_filter(x.fn(samplerate(x))) for _ in 1:nchannels(x.signal)]
+    len = init_length(x)
+    input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
+    output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
+
+    FilterChunk(0,size(output,1), 0,0,0, hs,input,output,nothing)
 end
 nsamples(x::FilterChunk) = x.len
-
-struct NullBuffer
-    len::Int
-    ch::Int
-end
-Base.size(x::NullBuffer) = (x.len,x.ch)
-Base.size(x::NullBuffer,n) = (x.len,x.ch)[n]
-writesink!(x::NullBuffer,i,y) = y
-Base.view(x::NullBuffer,i,j) = x
-willskip(::NullBuffer) = true
+@Base.propagate_inbounds sample(::FilteredSignal,x::FilterChunk,i) =
+    view(x.state.output,i+x.last_output_index,:)
 
 inputlength(x,n) = n
 outputlength(x,n) = n
@@ -219,58 +210,38 @@ inputlength(x::DSP.Filters.Filter,n) = DSP.inputlength(x,n)
 outputlength(x::DSP.Filters.Filter,n) = DSP.outputlength(x,n)
 
 function nextchunk(x::FilteredSignal,maxlen,skip,
-    chunk::FilterChunk=FilterChunk(0,0,FilterState(x)))
+    chunk::FilterChunk=FilterChunk(x))
 
-    len = min(maxlen,x.blocksize)
-    n = chunk.n + chunk.len
-    index = n+len
+    last_output_index = chunk.last_output_index + chunk.len
 
-    state = chunk.state
-    first_output_offset = chunk.first_output_offset
-    last_output_offset = chunk.last_output_offset
-    last_input_offset = chunk.last_input_offset
-    if chunk.last_output_offset+1 ≤ index
-        # drop any samples that we do not wish to generate output for
-        if chunk.last_output_offset+1 < index
-            recurse_len = index - (chunk.last_output_offset + 1)
-            recusre_chunk = FilterChunk(0,chunk.last_output_offset,state)
-            sink!(NullBuffer(recurse_len,nchannels(x)),x,SignalTrait(x),
-                  nextchunk(x,recurse_len,true,recusre_chunk))
+    if last_output_index < size(chunk,1)
+        len = min(maxlen, size(chunk.output) - last_output_index)
+        FilterChunk(len, last_output_index, chunk.last_input_offset,
+            chunk.first_output_offset, chunk.last_output_offset,
+            chunk.hs, chunk.input, chunk.output, chunk.child)
+    else
+        len = min(maxlen,size(chunk.output,1))
+
+        psig = pad(x.signal,zero)
+        childchunk = !isnothing(child(chunk)) ? child(chunk) :
+            nextchunk(psig,size(chunk.input,1),false)
+        childchunk = sink!(chunk.input,psig,SignalTrait(psig),childchunk)
+        last_input_offset = chunk.last_input_offset + size(chunk.input,1)
+
+        # filter the input to the output buffer
+        out_len = outputlength(chunk.hs[1],size(chunk.input,1))
+        for ch in 1:size(chunk.output,2)
+            filt!(view(chunk.output,1:out_len,ch),chunk.hs[ch],
+                    view(chunk.input,:,ch))
         end
-        @assert state.last_output_offset+1 ≥ index
+        last_output_offset = chunk.last_output_offset + out_len
+        first_output_offset = chunk.last_output_offset
+        last_output_index = 0
 
-        if last_output_offset+1 == index
-            first_output_offset = last_output_offset
-
-            # write child samples to input buffer
-            # @show x.blocksize
-            # @show nsamples(x)-state.last_input_offset
-
-            psig = pad(x.signal,zero)
-            sink!(state.input,psig,SignalTrait(psig),last_input_offset)
-            last_input_offset += size(state.input,1)
-
-            # filter the input to the output buffer
-            out_len = outputlength(state.hs[1],size(state.input,1))
-            for ch in 1:size(state.output,2)
-                filt!(view(state.output,1:out_len,ch),state.hs[ch],
-                        view(state.input,:,ch))
-            end
-            last_output_offset += out_len
-        end
+        FilterChunk(len, last_output_index, last_input_offset,
+            first_output_offset, last_output_offset,
+            chunk.hs, chunk.input, chunk.output, childchunk)
     end
-    @assert last_output_offset ≥ index || last_output_offset == nsamples(x)
-
-    # TODO: check order of arguments (lastoutput == index... I think? double
-    # check that's right)
-
-    state.last_output_offset ≥ n+len ? FilterChunk(n,len,index,last_input_offset,
-        first_output_offset,last_output_offset,state) : nothing
-end
-
-@Base.propagate_inbounds function sample(::FilteredSignal,x::FilterChunk,i)
-    index = i+x.lastoutput-x.first_output_offset
-    view(x.state.output,index,:)
 end
 
 # TODO: create an online version of normpower?
@@ -309,8 +280,8 @@ function initchunk(x::NormedSignal)
         error("Cannot normalize an infinite-length signal. Please ",
               "use `until` to take a prefix of the signal")
     end
-    vals = sink!(Array{channel_eltype(x)}(undef,nsamples(x),nchannels(x)),
-        x.signal)
+    vals = Array{channel_eltype(x)}(undef,nsamples(x),nchannels(x))
+    sink!(vals, x.signal)
 
     rms = sqrt(mean(x -> float(x)^2,vals))
     vals ./= rms

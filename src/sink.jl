@@ -83,6 +83,7 @@ function sink!(result::Union{AbstractVector,AbstractMatrix},x;
     x = tochannels(x,size(result,2))
 
     sink!(result,x,SignalTrait(x))
+    result
 end
 
 abstract type AbstractChunk; end
@@ -94,7 +95,6 @@ end
 fold(x) = zip(x,Iterators.drop(x,1))
 sink!(result,x,sig::IsSignal) =
     sink!(result,x,sig,nextchunk(x,size(result,1),false))
-willskip(x) = false
 function sink!(result,x,::IsSignal,chunk)
     written = 0
     while !isnothing(chunk) && written < size(result,1)
@@ -102,10 +102,11 @@ function sink!(result,x,::IsSignal,chunk)
         sink_helper!(result,written,x,chunk)
         written += nsamples(chunk)
         maxlen = size(result,1)-written
-        chunk = nextchunk(x,maxlen,willskip(result),chunk)
+        chunk = nextchunk(x,maxlen,false,chunk)
     end
     @assert written == size(result,1)
-    result
+
+    chunk
 end
 
 @noinline function sink_helper!(result,written,x,chunk)
