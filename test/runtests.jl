@@ -343,15 +343,17 @@ progress = Progress(total_test_groups,desc="Running tests...")
         for nch in 1:2
             tone = signal(sin,100Hz,ω=10Hz) |> tochannels(nch) |> until(5s)
             ramped = signal(sin,100Hz,ω=10Hz) |> tochannels(nch) |> until(5s) |>
-                ramp(100ms) |> sink
+                ramp(500ms) |> sink
             # TODO: ramped signal is not right
-            @test mean(abs,ramped[1:5]) < mean(abs,ramped[6:10])
+            @test mean(@λ(_^2),ramped[0s .. 500ms]) < mean(@λ(_^2),ramped[500ms .. 1s])
+            @test mean(@λ(_^2),ramped[4.5s .. 5s]) < mean(@λ(_^2),ramped[4s .. 4.5s])
             @test mean(abs,ramped) < mean(abs,sink(tone))
             @test mean(ramped) < 1e-4
 
+            # TODO: fade to is revealing an issue with chunksetups
             x = signal(sin,22Hz,ω=10Hz) |> tochannels(nch) |> until(2s)
             y = signal(sin,22Hz,ω=5Hz) |> tochannels(nch) |> until(2s)
-            fading = fadeto(x,y,100ms)
+            fading = fadeto(x,y,500ms)
             result = sink(fading)
             @test nsamples(fading) == ceil(Int,(2+2-0.1)*22)
             @test nsamples(result) == nsamples(fading)

@@ -61,54 +61,60 @@ function sample(x::RampSignal{:on},chunk::RampChunk,i)
     Fill(rampval,nchannels(x))
 end
 function sample(x::RampSignal{:off},chunk::RampChunk,i)
-    startramp = chunk.marker
+    startramp = chunk.marker - chunk.offset
+    stop = chunk.stop - chunk.offset
     rampval = chunk.stop > startramp ?
-        rampval = chunk.ramp(1-(i - startramp)/(chunk.stop - startramp)) :
+        rampval = chunk.ramp(1-(i - startramp)/(stop - startramp)) :
         rampval = chunk.ramp(1)
     Fill(rampval,nchannels(x))
 end
 
-initchunk(x::RampSignal{:on}) =
-    RampChunk(x,x.fn,resolvelen(x),nsamples(x),0,0)
-initchunk(x::RampSignal{:off}) =
-    RampChunk(x,x.fn,nsamples(x) - resolvelen(x),nsamples(x),0,0)
+function nextchunk(x::RampSignal{:on},maxlen,skip)
+    ramplen = resolvelen(x)
+    RampChunk(x,x.fn,ramplen,nsamples(x),0,min(ramplen,maxlen))
+end
+function nextchunk(x::RampSignal{:off},maxlen,skip)
+    rampstart = nsamples(x) - resolvelen(x)
+    RampChunk(x,nothing,rampstart,nsamples(x),0,min(rampstart,maxlen))
+end
 
-function nextchunk(x::RampSignal{:on},maxlen,skip,chunk::RampChunk=initchunk(x))
+function nextchunk(x::RampSignal{:on},maxlen,skip,chunk::RampChunk)
     len = min(maxlen,chunk.marker - chunk.offset)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk(x,x.fn,chunk.marker,chunk.stop,offset,len)
     else
+        @assert offset == chunk.marker
         RampChunk(x,nothing,chunk.marker,chunk.stop,offset,len)
     end
 end
 
-function nextchunk(x::RampSignal{:on},maxlen,skip,
-    chunk::RampChunk{Nothing}=initchunk(x))
+function nextchunk(x::RampSignal{:on},maxlen,skip,chunk::RampChunk{Nothing})
 
     len = min(maxlen,chunk.stop - chunk.offset)
     offset = chunk.offset + chunk.len
-    RampChunk(x,nothing,chunk.marker,chunk.stop,offset,len)
+    if len > 0
+        RampChunk(x,nothing,chunk.marker,chunk.stop,offset,len)
+    end
 end
 
-function nextchunk(x::RampSignal{:off},maxlen,skip,
-    chunk::RampChunk{Nothing}=initchunk(x))
-
+function nextchunk(x::RampSignal{:off},maxlen,skip,chunk::RampChunk{Nothing})
     len = min(maxlen,chunk.marker - chunk.offset)
     offset = chunk.offset + chunk.len
     if offset < chunk.marker
         RampChunk(x,nothing,chunk.marker,chunk.stop,offset,len)
     else
+        @assert offset == chunk.marker
         RampChunk(x,x.fn,chunk.marker,chunk.stop,offset,len)
     end
 end
 
-function nextchunk(x::RampSignal{:off},maxlen,skip,
-    chunk::RampChunk=initchunk(x))
-
+function nextchunk(x::RampSignal{:off},maxlen,skip,chunk::RampChunk)
     len = min(maxlen,chunk.stop - chunk.offset)
     offset = chunk.offset + chunk.len
-    RampChunk(x,x.fn,chunk.marker,chunk.stop,offset,len)
+    if len > 0
+        RampChunk(x,x.fn,chunk.marker,chunk.stop,offset,len)
+    end
 end
 
 function Base.show(io::IO, ::MIME"text/plain",x::RampSignal{D}) where D
