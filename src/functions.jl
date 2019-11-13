@@ -42,19 +42,22 @@ function Base.show(io::IO, ::MIME"text/plain",x::SignalFunction)
 end
 
 struct FunctionChunk
+    offset::Int
     len::Int
 end
-nextchunk(x::SignalFunction,maxlen,skip) = FunctionChunk(maxlen)
-nextchunk(x::SignalFunction,maxlen,skip,::FunctionChunk) = FunctionChunk(maxlen)
+nextchunk(x::SignalFunction,maxlen,skip) = FunctionChunk(0,maxlen)
+nextchunk(x::SignalFunction,maxlen,skip,chunk::FunctionChunk) =
+    FunctionChunk(chunk.offset + chunk.len,maxlen)
 nsamples(chunk::FunctionChunk) = chunk.len
 
-sample(x,chunk::FunctionChunk,i) = x.fn(2π*((i/x.samplerate*x.ω + x.ϕ) % 1.0))
+sample(x,chunk::FunctionChunk,i) =
+    x.fn(2π*(((i+chunk.offset)/x.samplerate*x.ω + x.ϕ) % 1.0))
 sample(x::SignalFunction{<:Any,Missing},chunk::FunctionChunk,i) =
-    x.fn(i/x.samplerate + x.ϕ)
+    x.fn((i+chunk.offset)/x.samplerate + x.ϕ)
 sample(x::SignalFunction{typeof(sin)},chunk::FunctionChunk,i) =
-    sinpi(2*(i/x.samplerate*x.ω + x.ϕ))
+    sinpi(2*((i+chunk.offset)/x.samplerate*x.ω + x.ϕ))
 sample(x::SignalFunction{typeof(sin),Missing},chunk::FunctionChunk,i) =
-    sinpi(2*(i/x.samplerate + x.ϕ))
+    sinpi(2*((i+chunk.offset)/x.samplerate + x.ϕ))
 
 tosamplerate(x::SignalFunction,::IsSignal,::ComputedSignal,fs;blocksize) =
     SignalFunction(x.fn,x.first,x.ω,x.ϕ,coalesce(inHz(Float64,fs),x.samplerate))
