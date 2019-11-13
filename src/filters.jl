@@ -233,7 +233,8 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
         len = min(maxlen,size(chunk.output,1))
 
         psig = pad(x.signal,zero)
-        childchunk = !isa(child(chunk), UndefChild) ? child(chunk) :
+        childchunk = !isa(child(chunk), UndefChild) ?
+            nextchunk(psig,size(chunk.input,1),false,child(chunk)) :
             nextchunk(psig,size(chunk.input,1),false)
         childchunk = sink!(chunk.input,psig,SignalTrait(psig),childchunk)
         last_input_offset = chunk.last_input_offset + size(chunk.input,1)
