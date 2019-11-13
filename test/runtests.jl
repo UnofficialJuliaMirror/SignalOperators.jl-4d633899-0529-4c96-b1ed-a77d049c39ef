@@ -344,6 +344,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
             tone = signal(sin,100Hz,ω=10Hz) |> tochannels(nch) |> until(5s)
             ramped = signal(sin,100Hz,ω=10Hz) |> tochannels(nch) |> until(5s) |>
                 ramp(100ms) |> sink
+            # TODO: ramped signal is not right
             @test mean(abs,ramped[1:5]) < mean(abs,ramped[6:10])
             @test mean(abs,ramped) < mean(abs,sink(tone))
             @test mean(ramped) < 1e-4
