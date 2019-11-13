@@ -102,7 +102,9 @@ function sink!(result,x,::IsSignal,chunk)
         sink_helper!(result,written,x,chunk)
         written += nsamples(chunk)
         maxlen = size(result,1)-written
-        chunk = nextchunk(x,maxlen,false,chunk)
+        if maxlen > 0
+            chunk = nextchunk(x,maxlen,false,chunk)
+        end
     end
     @assert written == size(result,1)
 
