@@ -325,12 +325,6 @@ progress = Progress(total_test_groups,desc="Running tests...")
             @test sink(high2) ≈ sink(high)
 
             # proper state of cut filtered signal (with blocks)
-
-            # TODO: the `after` part is working but blocking by different
-            # lengths gives slighlty different results based on the output it
-            # looks like there is a entry in the input buffer not being written
-            # to
-
             high3 = cmplx |>
                 highpass(8Hz,method=Chebyshev1(5,1),blocksize=64) |>
                 after(1s)
