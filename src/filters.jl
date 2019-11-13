@@ -282,7 +282,8 @@ struct NormedChunk{A}
     vals::A
 end
 nsamples(x::NormedChunk) = x.len
-@Base.propagate_inbounds sample(x::NormedChunk,i) = view(x.vals,i,:)
+@Base.propagate_inbounds sample(::NormedSignal,x::NormedChunk,i) =
+    view(x.vals,i,:)
 
 function initchunk(x::NormedSignal)
     if isinf(nsamples(x))
@@ -299,7 +300,7 @@ function initchunk(x::NormedSignal)
     NormedChunk(0,0,vals)
 end
 
-function nextchunk(x::NormedSignal,maxlen,skip,chunk::NormedChunk)
+function nextchunk(x::NormedSignal,maxlen,skip,chunk::NormedChunk=initchunk(x))
     len = min(maxlen,nsamples(x) - chunk.offset)
     NormedChunk(chunk.offset + chunk.len, len, chunk.vals)
 end
