@@ -167,20 +167,60 @@ initchunk(x::MapSignal{<:Any,N}) where N =
 function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,
     chunk::MapSignalChunk=initchunk(x)) where {Fn,N,CN}
 
-    offsets = map(@λ(_ + nsamples(chunk)),chunk.offsets)
+    if x.padded_signals[1].signal isa MapSignal
+        @info "Next chunk"
+    end
+
+    offsets = map(chunk.offsets, chunk.chunks) do offset, childchunk
+        offset += nsamples(chunk)
+        offset = offset == nsamples(childchunk) ? 0 : offset
+
+        if x.padded_signals[1].signal isa MapSignal
+            @show offset
+            @show nsamples(chunk)
+            @show nsamples(childchunk)
+        end
+        offset
+    end
+
+    # if x.padded_signals[1].signal isa MapSignal
+    #     io = IOBuffer()
+    #     show(io,MIME("text/plain"),x)
+    #     println("x = ",String(take!(io)))
+    #     @show offsets
+    # end
+
     chunks = map(x.padded_signals,chunk.chunks,offsets) do sig, childchunk, offset
-        if offset == nsamples(childchunk)
-            nextchunk(sig,maxlen,skip,childchunk)
+        if offset == 0
+            result = nextchunk(sig,maxlen,skip,childchunk)
+            # if x.padded_signals[1].signal isa MapSignal
+            #     io = IOBuffer()
+            #     show(io,MIME("text/plain"),sig)
+            #     @info "next chunk for $(String(take!(io)))"
+            #     @show result
+            # end
+            result
         else
+            # if x.padded_signals[1].signal isa MapSignal
+            #     io = IOBuffer()
+            #     show(io,MIME("text/plain"),sig)
+            #     @info "keep chunk for $(String(take!(io)))"
+            # end
             childchunk
         end
     end
-    # reset any used chunk offsets back to 0
-    offsets = map(@λ(_1 == nsamples(_2) ? 0 : _1), offsets, chunk.chunks)
+    # if x.padded_signals[1].signal isa MapSignal
+    #     @info "New offsets"
+    #     @show offsets
+    # end
 
     # find the smallest chiold chunk length, and use that as the length for the
     # parent chunk
     len = minimum(nsamples.(chunks) .- offsets)
+    if x.padded_signals[1].signal isa MapSignal
+        @show nsamples.(chunks)
+        @show len
+    end
 
     Ch, C, O = typeof(chunk.channels), typeof(chunks), typeof(offsets)
     MapSignalChunk{Ch,C,O}(len,chunk.channels,chunks,offsets)
