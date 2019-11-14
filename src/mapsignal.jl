@@ -193,12 +193,12 @@ function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,
     chunks = map(x.padded_signals,chunk.chunks,offsets) do sig, childchunk, offset
         if offset == 0
             result = nextchunk(sig,maxlen,skip,childchunk)
-            # if x.padded_signals[1].signal isa MapSignal
-            #     io = IOBuffer()
-            #     show(io,MIME("text/plain"),sig)
-            #     @info "next chunk for $(String(take!(io)))"
-            #     @show result
-            # end
+            if x.padded_signals[1].signal isa MapSignal
+                io = IOBuffer()
+                show(io,MIME("text/plain"),sig)
+                @info "next chunk for $(String(take!(io)))"
+                dump(result)
+            end
             result
         else
             # if x.padded_signals[1].signal isa MapSignal
@@ -218,6 +218,7 @@ function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,
     # parent chunk
     len = minimum(nsamples.(chunks) .- offsets)
     if x.padded_signals[1].signal isa MapSignal
+        @show maxlen
         @show nsamples.(chunks)
         @show len
     end
