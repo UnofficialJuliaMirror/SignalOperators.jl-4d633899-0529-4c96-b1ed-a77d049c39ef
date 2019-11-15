@@ -142,6 +142,7 @@ const MAX_CHANNEL_STACK = 64
 
 struct MapSignalChunk{Ch,C,O}
     len::Int
+    offset::Int
     channels::Ch
     chunks::C
     offsets::O
@@ -162,69 +163,33 @@ nsamples(::EmptyChildChunk) = 0
 nextchunk(x,maxlen,skip,::EmptyChildChunk) = nextchunk(x,maxlen,skip)
 
 initchunk(x::MapSignal{<:Any,N}) where N =
-    MapSignalChunk(0,prepare_channels(x),[emptychild for _ in 1:N],
+    MapSignalChunk(0,0,prepare_channels(x),[emptychild for _ in 1:N],
         Tuple(zeros(N)))
 function nextchunk(x::MapSignal{Fn,N,CN},maxlen,skip,
     chunk::MapSignalChunk=initchunk(x)) where {Fn,N,CN}
 
-    if x.padded_signals[1].signal isa MapSignal
-        @info "Next chunk"
-    end
+    maxlen = min(maxlen,nsamples(x) - (chunk.offset + chunk.len))
+    (maxlen == 0) && return nothing
 
     offsets = map(chunk.offsets, chunk.chunks) do offset, childchunk
         offset += nsamples(chunk)
-        offset = offset == nsamples(childchunk) ? 0 : offset
-
-        if x.padded_signals[1].signal isa MapSignal
-            @show offset
-            @show nsamples(chunk)
-            @show nsamples(childchunk)
-        end
-        offset
+        offset == nsamples(childchunk) ? 0 : offset
     end
-
-    # if x.padded_signals[1].signal isa MapSignal
-    #     io = IOBuffer()
-    #     show(io,MIME("text/plain"),x)
-    #     println("x = ",String(take!(io)))
-    #     @show offsets
-    # end
 
     chunks = map(x.padded_signals,chunk.chunks,offsets) do sig, childchunk, offset
         if offset == 0
-            result = nextchunk(sig,maxlen,skip,childchunk)
-            if x.padded_signals[1].signal isa MapSignal
-                io = IOBuffer()
-                show(io,MIME("text/plain"),sig)
-                @info "next chunk for $(String(take!(io)))"
-                dump(result)
-            end
-            result
+            nextchunk(sig,maxlen,skip,childchunk)
         else
-            # if x.padded_signals[1].signal isa MapSignal
-            #     io = IOBuffer()
-            #     show(io,MIME("text/plain"),sig)
-            #     @info "keep chunk for $(String(take!(io)))"
-            # end
             childchunk
         end
     end
-    # if x.padded_signals[1].signal isa MapSignal
-    #     @info "New offsets"
-    #     @show offsets
-    # end
 
-    # find the smallest chiold chunk length, and use that as the length for the
-    # parent chunk
-    len = minimum(nsamples.(chunks) .- offsets)
-    if x.padded_signals[1].signal isa MapSignal
-        @show maxlen
-        @show nsamples.(chunks)
-        @show len
-    end
-
+    # find the smallest child chunk length, and use that as the length for the
+    # parent chunk length
+    len = min(maxlen,minimum(nsamples.(chunks) .- offsets))
     Ch, C, O = typeof(chunk.channels), typeof(chunks), typeof(offsets)
-    MapSignalChunk{Ch,C,O}(len,chunk.channels,chunks,offsets)
+    MapSignalChunk{Ch,C,O}(len,chunk.offset + chunk.len,chunk.channels,chunks,
+        offsets)
 end
 
 trange(::Val{N}) where N = (trange(Val(N-1))...,N)
