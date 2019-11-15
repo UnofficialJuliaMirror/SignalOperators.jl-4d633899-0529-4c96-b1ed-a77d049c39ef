@@ -219,6 +219,12 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
     last_output_index = chunk.last_output_index + chunk.len
 
     # check for leftover samples in the old output buffer
+
+    # TODO: this can't be `chunk.output` because it's not always completely
+    # filled (depends on the value of `out_len`) we need know what the last
+    # output length was; could do that by using len, but then
+    # would need to redefine `nsamples`
+
     if last_output_index < size(chunk.output,1)
         len = min(maxlen, size(chunk.output,1) - last_output_index)
 
@@ -230,7 +236,6 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
         nothing
     else
         @assert !isnothing(child(chunk))
-        len = min(maxlen,size(chunk.output,1))
 
         psig = pad(x.signal,zero)
         childchunk = !isa(child(chunk), UndefChild) ?
@@ -248,7 +253,7 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
         last_output_offset = chunk.last_output_offset + out_len
         last_output_index = 0
 
-        FilterChunk(len, last_output_index, last_input_offset,
+        FilterChunk(@show(min(maxlen,out_len)), last_output_index, last_input_offset,
             last_output_offset, chunk.hs, chunk.input, chunk.output, childchunk)
     end
 end
