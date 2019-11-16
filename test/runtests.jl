@@ -380,11 +380,10 @@ progress = Progress(total_test_groups,desc="Running tests...")
             @test samplerate(resamp) == 40
             @test nsamples(resamp) == 2nsamples(tone)
 
-            downsamp = tosamplerate(tone,10Hz)
-            @test samplerate(downsamp) == 10
-            @test nsamples(downsamp) == 0.5nsamples(tone)
+            downsamp = tosamplerate(tone,15Hz)
+            @test samplerate(downsamp) == 15
+            @test nsamples(downsamp) == 0.75nsamples(tone)
             @test sink(downsamp) |> nsamples == nsamples(downsamp)
-
 
             x = rand(10,nch) |> tosamplerate(2kHz) |> sink
             @test samplerate(x) == 2000
@@ -725,7 +724,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
         x = append(a,b) |> after(3s)
         @test sink(x,samplerate=20Hz) == b |> after(1s) |> sink(samplerate=20Hz)
 
-        noise = signal(randn,20Hz) |> until(1s) |> sink
+        noise = signal(randn,20Hz) |> until(6s) |> sink
 
         # filtering in combination with `after`
         x = noise |> lowpass(7Hz) |> until(4s)
