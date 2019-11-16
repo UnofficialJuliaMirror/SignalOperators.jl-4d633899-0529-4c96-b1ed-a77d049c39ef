@@ -178,6 +178,7 @@ end
 struct FilterChunk{H,S,T,C}
     len::Int
     last_output_index::Int
+    available_output::Int
 
     last_input_offset::Int
     last_output_offset::Int
@@ -202,7 +203,7 @@ function FilterChunk(x::FilteredSignal)
     input = Array{channel_eltype(x.signal)}(undef,len,nchannels(x))
     output = Array{channel_eltype(x)}(undef,x.blocksize,nchannels(x))
 
-    FilterChunk(0,size(output,1), 0,0, hs,input,output,undef_child)
+    FilterChunk(0,0,0, 0,0, hs,input,output,undef_child)
 end
 nsamples(x::FilterChunk) = x.len
 @Base.propagate_inbounds sample(::FilteredSignal,x::FilterChunk,i) =
@@ -217,23 +218,18 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
     chunk::FilterChunk=FilterChunk(x))
 
     last_output_index = chunk.last_output_index + chunk.len
+    if nsamples(x) == last_output_index
+        return nothing
+    end
 
-    # check for leftover samples in the old output buffer
-
-    # TODO: this can't be `chunk.output` because it's not always completely
-    # filled (depends on the value of `out_len`) we need know what the last
-    # output length was; could do that by using len, but then
-    # would need to redefine `nsamples`
-
-    if last_output_index < size(chunk.output,1)
-        len = min(maxlen, size(chunk.output,1) - last_output_index)
+    # check for leftover samples in the output buffer
+    if last_output_index < chunk.available_output
+        len = min(maxlen, chunk.available_output - last_output_index)
 
         FilterChunk(len, last_output_index, chunk.last_input_offset,
-            chunk.last_output_offset, chunk.hs, chunk.input, chunk.output,
-            chunk.child)
-    # check for the end of the child signal
-    elseif nsamples(child(x)) - chunk.last_input_offset == 0
-        nothing
+            chunk.available_output, chunk.last_output_offset, chunk.hs,
+            chunk.input, chunk.output, chunk.child)
+    # otherwise, generate more filtered output
     else
         @assert !isnothing(child(chunk))
 
@@ -244,17 +240,17 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
         childchunk = sink!(chunk.input,psig,SignalTrait(psig),childchunk)
         last_input_offset = chunk.last_input_offset + size(chunk.input,1)
 
-        # filter the input to the output buffer
+        # filter the input into the output buffer
         out_len = outputlength(chunk.hs[1],size(chunk.input,1))
         for ch in 1:size(chunk.output,2)
             filt!(view(chunk.output,1:out_len,ch),chunk.hs[ch],
                     view(chunk.input,:,ch))
         end
         last_output_offset = chunk.last_output_offset + out_len
-        last_output_index = 0
 
-        FilterChunk(@show(min(maxlen,out_len)), last_output_index, last_input_offset,
-            last_output_offset, chunk.hs, chunk.input, chunk.output, childchunk)
+        FilterChunk(min(maxlen,out_len), 0,
+            out_len, last_input_offset, last_output_offset, chunk.hs,
+            chunk.input, chunk.output, childchunk)
     end
 end
 
