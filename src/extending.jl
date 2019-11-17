@@ -270,9 +270,11 @@ child(x::PadChunk) = nothing
 nsamples(x::PadChunk{<:Nothing}) = nsamples(child(x))
 nsamples(x::PadChunk) = x.child_or_len
 
-sample(x,chunk::PadChunk{<:Nothing},i) = sample(child(x),child(chunk),i)
-sample(x,chunk::PadChunk{<:Function},i) = chunk.pad(i + chunk.offset)
-sample(x,chunk::PadChunk,i) = chunk.pad
+@Base.propagate_inbounds sample(x,chunk::PadChunk{<:Nothing},i) =
+    sample(child(x),child(chunk),i)
+@Base.propagate_inbounds sample(x,chunk::PadChunk{<:Function},i) =
+    chunk.pad(i + chunk.offset)
+@Base.propagate_inbounds sample(x,chunk::PadChunk,i) = chunk.pad
 
 function nextchunk(x::PaddedSignal,maxlen,skip)
     chunk = nextchunk(child(x),maxlen,skip)
