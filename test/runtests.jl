@@ -770,6 +770,12 @@ progress = Progress(total_test_groups,desc="Running tests...")
             sink(samplerate=12Hz)
         @test duration(x) == 2
 
+        # different offset appending summation
+        x = append(1 |> until(1s),2 |> until(2s))
+        y = append(3 |> until(2s),4 |> until(1s))
+        result = mix(x,y) |> sink(samplerate=10Hz)
+        @test all(result .== [fill(4,10);fill(5,10);fill(6,10)])
+
         # multiple operators with a mix in the middle
         x = randn |> until(4s) |> after(50ms) |> lowpass(5Hz) |>
             mix(signal(sin,ω=7Hz)) |>
