@@ -226,8 +226,8 @@ function nextchunk(x::FilteredSignal,maxlen,skip,
     if last_output_index < chunk.available_output
         len = min(maxlen, chunk.available_output - last_output_index)
 
-        FilterChunk(len, last_output_index, chunk.last_input_offset,
-            chunk.available_output, chunk.last_output_offset, chunk.hs,
+        FilterChunk(len, last_output_index, chunk.available_output,
+            chunk.last_input_offset, chunk.last_output_offset, chunk.hs,
             chunk.input, chunk.output, chunk.child)
     # otherwise, generate more filtered output
     else

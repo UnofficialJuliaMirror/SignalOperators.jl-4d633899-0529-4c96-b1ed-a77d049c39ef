@@ -759,7 +759,7 @@ progress = Progress(total_test_groups,desc="Running tests...")
 
         y = noise |>
             lowpass(9Hz,blocksize=11) |>
-            # mix(signal(sin,ω=12Hz)) |>
+            mix(signal(sin,ω=12Hz)) |>
             highpass(4Hz,method=Chebyshev1(5,1),blocksize=9) |>
             sink
         @test x ≈ y
