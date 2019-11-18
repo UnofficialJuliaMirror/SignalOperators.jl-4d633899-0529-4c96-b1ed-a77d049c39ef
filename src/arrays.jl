@@ -97,7 +97,7 @@ end
 array_chunk_helper(x::AxTimeD1,offset,indices) =
     ArrayChunk(offset, view(x,indices,:))
 array_chunk_helper(x::AxTimeD2,offset,indices) =
-    ArrayChunk(offset, PermuateDimsArray(view(x,:,indices),(2,1)))
+    ArrayChunk(offset, PermuteDimsArray(view(x,:,indices),(2,1)))
 
 function signaltile(x)
     io = IOBuffer()
