@@ -85,9 +85,9 @@ end
 child(x::CutChunk) = x.child
 
 function nextchunk(x::AfterApply,maxlen,skip)
-    skipped = 0
     len = resolvelen(x)
-    childchunk = nextchunk(child(x),len,skip)
+    childchunk = nextchunk(child(x),len,true)
+    skipped = nsamples(childchunk)
     while !isnothing(childchunk) && skipped < len
         skipped += nsamples(childchunk)
         childchunk = nextchunk(child(x),min(maxlen,len - skipped),true,
